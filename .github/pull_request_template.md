@@ -1,4 +1,5 @@
 ## 📌 Referencia de Tarea / Historia de Usuario
+
 - **Historia de Usuario**: <!-- Ej. HU01, HU07, HU08 -->
 - **Tarea**: <!-- Ej. HU07-T01 -->
 - **Responsable (Desarrollador)**: <!-- Nombre del autor -->
@@ -7,12 +8,15 @@
 ---
 
 ## 📝 Descripción del Cambio
+
 <!-- Breve resumen de lo implementado y motivación técnica -->
 
 ---
 
 ## ✅ Definition of Done (DoD - Prácticas XP acordadas)
+
 Antes de solicitar la aprobación final, verifica que se cumplen todos los puntos:
+
 - [ ] **TDD aplicado**: Se escribió la prueba unitaria previa que fallaba (rojo) y luego se implementó la solución (verde).
 - [ ] **Tests unitarios locales**: Todos los tests pasan correctamente (`npm test`).
 - [ ] **Estándares y formato**: El linter y formateador pasan limpios sin advertencias (`npm run lint`).
