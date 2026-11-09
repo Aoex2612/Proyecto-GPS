@@ -102,8 +102,10 @@ Una tarea solo se considera **terminada** si cumple:
 │   ├── auth/                      # HU08: Cliente de GitHub y llamadas seguras (Octokit)
 │   ├── classifier/                # HU07: Clasificador de autoría (Humano / IA / Desconocido)
 │   ├── git/                       # HU01 / HU07: Extracción de metadatos de Git y commits
+│   ├── pipeline/                  # HU01: Contrato de fases del ciclo de entrega
 │   ├── reporter/                  # HU08: Notificación en PRs y manejo de errores
 │   └── utils/                     # Utilidades comunes y logging
+├── docs/                          # Documentación de diseño por tarea
 ├── tests/                         # Pruebas unitarias (Jest) y mocks
 ├── action.yml                     # Manifiesto de la GitHub Action
 ├── package.json                   # Dependencias y scripts
