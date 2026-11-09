@@ -1,0 +1,39 @@
+{
+  "name": "ai-authorship-qa-action",
+  "version": "1.0.0",
+  "description": "GitHub Action para auditoría automatizada de autoría (humana vs. IA) y control de calidad",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{js,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{js,json,md,yml,yaml}\"",
+    "build": "ncc build src/index.js -o dist --source-map --license licenses.txt"
+  },
+  "keywords": [
+    "github-action",
+    "code-review",
+    "ai-detection",
+    "quality-assurance"
+  ],
+  "author": "Equipo Uma",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.3",
+    "eslint": "^8.57.1",
+    "jest": "^29.7.0",
+    "prettier": "^3.5.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coveragePathIgnorePatterns": [
+      "/node_modules/"
+    ]
+  }
+}

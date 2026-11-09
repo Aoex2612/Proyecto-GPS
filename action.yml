@@ -1,0 +1,27 @@
+name: 'AI Authorship & Quality Gate Action'
+description: 'Auditoría automatizada de autoría (humana vs. IA) y control de calidad en entregas'
+author: 'Equipo Uma'
+
+inputs:
+  github-token:
+    description: 'Token de GitHub para autenticación y llamadas a la API (Octokit)'
+    required: true
+    default: ${{ github.token }}
+  threshold-ai:
+    description: 'Porcentaje máximo de código asistido permitido sin supervisión'
+    required: false
+    default: '50'
+  fail-on-threshold:
+    description: 'Indica si la Action debe fallar el status check si se supera el umbral'
+    required: false
+    default: 'true'
+
+outputs:
+  review-status:
+    description: 'Resultado del análisis de la entrega (passed, warning, failed)'
+  metrics-summary:
+    description: 'Resumen en formato JSON de las métricas extraídas'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
