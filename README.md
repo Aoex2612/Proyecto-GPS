@@ -6,31 +6,34 @@
 
 ## 👥 Equipo y Organización (UMA)
 
-| Miembro | Rol Principal (Sprint 1) | Iniciales |
-|---|---|---|
-| **Candela Marco Jiménez** | Scrum Master / QA Reviewer | `CJ` |
-| **Jesús Cañete García** | Gestor de Proyecto / Desarrollador CI | `JG` |
-| **Ángel López Sánchez** | Coordinador Técnico / Metadatos Git | `AS` |
-| **Alejandro Jesús Ortiz Zamora** | Desarrollador (Criterios Autoría) | `AZ` |
-| **Félix Jiménez Almanza** | Desarrollador (API GitHub / Auth) | `FA` |
-| **Germán Peláez Gallardo** | QA / Análisis Estático (SonarQube) | `GG` |
-| **Jorge Torres Sánchez** | Desarrollador (Clasificación & Reportes) | `JS` |
-| **Pablo García Gómez** | Desarrollador (Validación & Reportes) | `PG` |
+| Miembro                          | Rol Principal (Sprint 1)                 | Iniciales |
+| -------------------------------- | ---------------------------------------- | --------- |
+| **Candela Marco Jiménez**        | Scrum Master / QA Reviewer               | `CJ`      |
+| **Jesús Cañete García**          | Gestor de Proyecto / Desarrollador CI    | `JG`      |
+| **Ángel López Sánchez**          | Coordinador Técnico / Metadatos Git      | `AS`      |
+| **Alejandro Jesús Ortiz Zamora** | Desarrollador (Criterios Autoría)        | `AZ`      |
+| **Félix Jiménez Almanza**        | Desarrollador (API GitHub / Auth)        | `FA`      |
+| **Germán Peláez Gallardo**       | QA / Análisis Estático (SonarQube)       | `GG`      |
+| **Jorge Torres Sánchez**         | Desarrollador (Clasificación & Reportes) | `JS`      |
+| **Pablo García Gómez**           | Desarrollador (Validación & Reportes)    | `PG`      |
 
 ---
 
 ## 🚀 Inicio Rápido en Local
 
 ### 1. Requisitos
+
 - [Node.js](https://nodejs.org/) v20 o superior
 - `npm` v10 o superior
 
 ### 2. Instalación de dependencias
+
 ```bash
 npm install
 ```
 
 ### 3. Ejecución de pruebas (TDD)
+
 ```bash
 # Ejecutar todas las pruebas unitarias y ver cobertura
 npm test
@@ -40,6 +43,7 @@ npm run test:watch
 ```
 
 ### 4. Linters y formateo de código
+
 ```bash
 # Comprobar estándares con ESLint
 npm run lint
@@ -52,6 +56,7 @@ npm run format
 ```
 
 ### 5. Compilación del artefacto de distribución
+
 ```bash
 npm run build
 ```
@@ -82,6 +87,7 @@ npm run build
 ## 📋 Definition of Done (DoD)
 
 Una tarea solo se considera **terminada** si cumple:
+
 1. **TDD obligatorio**: Se escribió primero la prueba unitaria que fallaba (rojo) antes del código de producción (verde).
 2. **Batería de pruebas**: Pasa el 100% de los tests unitarios con `npm test`.
 3. **Estilo**: Pasa `npm run lint` sin errores ni advertencias.
