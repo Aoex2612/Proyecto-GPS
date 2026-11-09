@@ -116,3 +116,12 @@ Una tarea solo se considera **terminada** si cumple:
 ├── .eslintrc.json                 # Reglas de linter
 └── .prettierrc                    # Configuración de formateo
 ```
+
+### Metadatos e identidades (HU07-T02)
+
+`parseCommitMetadata({ commits })` normaliza los commits recibidos de GitHub y devuelve:
+
+- Por commit: SHA, autor y committer (nombre, correo, login, tipo de cuenta e indicador de bot), mensaje, trailers, coautores indicados mediante `Co-authored-by` y diff disponible.
+- Una lista consolidada de identidades de autor, committer y coautores. Se consideran duplicadas las identidades que comparten correo o login; si no hay ninguno, se comparan por nombre.
+
+Git proporciona nombre y correo en los metadatos del commit, mientras que la API de GitHub puede añadir login y tipo de cuenta (`User` o `Bot`). Los parches se concatenan desde `files[].patch`; GitHub puede omitirlos en ficheros grandes o cuando el parche no está disponible, por lo que un diff vacío no significa que el commit no tenga cambios. Los trailers se conservan por clave y valor para que el clasificador pueda evaluar otras declaraciones además de los coautores.
