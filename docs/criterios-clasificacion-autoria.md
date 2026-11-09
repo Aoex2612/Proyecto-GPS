@@ -1,17 +1,5 @@
-# 📄 Criterios para la Distinción de Aportaciones Humanas y Automatizadas
-
-| Metadatos del Documento | Detalle                                                                             |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| **Historia de Usuario** | **HU07**: Determinación fiable del origen del trabajo                               |
-| **Tarea de Diseño**     | **T01**: Definir los criterios para distinguir aportaciones humanas y automatizadas |
-| **Responsable / Autor** | Alejandro Jesús Ortiz Zamora (`AZ`)                                                 |
-| **Revisor Asignado**    | Pablo García Gómez (`PG`)                                                           |
-| **Estado**              | Propuesta para Revisión                                                             |
-| **Versión**             | 1.0.0                                                                               |
-
----
-
-## 1. 🎯 Objetivo y Contexto
+# Criterios para la Distinción de Aportaciones Humanas y Automatizadas
+## 1. Objetivo y Contexto
 
 En el marco de la **HU07**, el objetivo primordial es:
 
@@ -21,7 +9,7 @@ Este documento establece la **especificación funcional y técnica de los criter
 
 ---
 
-## 2. ⚖️ Principios Rectores
+## 2. Principios Rectores
 
 1. **Determinismo sobre la duda**: La clasificación directa solo debe aplicarse cuando los datos ofrezcan certeza técnica.
 2. **Principio de No Penalización Errónea (In dubio pro humano)**: Si existe duda razonable o falta de evidencias concluyentes de uso de IA, la aportación **no** debe etiquetarse arbitrariamente como IA. Debe marcarse como `UNKNOWN` para su posterior auditoría humana (tratado en **T04**).
@@ -29,7 +17,7 @@ Este documento establece la **especificación funcional y técnica de los criter
 
 ---
 
-## 3. 🏷️ Categorías de Clasificación de Autoría
+## 3. Categorías de Clasificación de Autoría
 
 Se definen tres estados estándar de procedencia del código:
 
@@ -41,7 +29,7 @@ Se definen tres estados estándar de procedencia del código:
 
 ---
 
-## 4. 🔍 Criterios de Clasificación
+## 4. Criterios de Clasificación
 
 ### 4.1. Nivel 1: Criterios Deterministas de Metadatos (Certeza 100%)
 
@@ -96,7 +84,7 @@ Diseñados para detectar casos en los que un usuario humano genera el código co
 
 ---
 
-## 5. ❓ Criterios de Aportación Humana (`HUMAN`)
+## 5. Criterios de Aportación Humana (`HUMAN`)
 
 Una aportación se clasificará como **`HUMAN`** si y solo si:
 
@@ -108,7 +96,7 @@ Una aportación se clasificará como **`HUMAN`** si y solo si:
 
 ---
 
-## 6. ⚠️ Derivación a Desconocido (`UNKNOWN`) — Interfaz con T04
+## 6. Derivación a Desconocido (`UNKNOWN`) — Interfaz con T04
 
 En concordancia con el principio de no penalización errónea:
 
@@ -116,59 +104,3 @@ En concordancia con el principio de no penalización errónea:
   - **No se clasificará directamente como IA.**
   - Se derivará a **`UNKNOWN`** con un motivo asociado (_"anomalía de velocidad sin confirmación textual"_), permitiendo que la tarea **HU07-T04** defina el tratamiento de dicha incertidumbre y solicite revisión manual.
 - Aportaciones sin datos de autor o con metadatos corruptos/ausentes se clasificarán siempre como **`UNKNOWN`**.
-
----
-
-## 7. 💻 Especificación de Interfaz para la Implementación (HU07-T03)
-
-Para facilitar la labor del desarrollador asignado a la implementación (**Jorge Torres Sánchez - T03**), se propone la siguiente estructura de datos y firmas:
-
-### 7.1. Estructura de Entrada (`contribution`)
-
-```javascript
-{
-  author: {
-    name: string,
-    email: string,
-    userType?: string, // 'User' | 'Bot'
-    isBot?: boolean
-  },
-  committer?: {
-    name: string,
-    email: string,
-    userType?: string
-  },
-  coAuthors?: Array<{ name: string, email: string }>,
-  trailers?: Record<string, string>,
-  message?: string,
-  stats?: {
-    additions: number,
-    deletions: number,
-    elapsedMinutes: number
-  },
-  content?: string // Diffs o código añadido
-}
-```
-
-### 7.2. Interfaz del Clasificador
-
-```javascript
-/**
- * Clasifica una aportación según los criterios definidos en HU07-T01.
- * @param {object} contribution
- * @returns {string} 'human' | 'ai_assisted' | 'unknown'
- */
-function classifyOrigin(contribution) {
-  // A implementar en HU07-T03 por Jorge Torres Sánchez
-}
-```
-
----
-
-## 8. 📋 Resumen para Revisión por Pares (Matriz P4)
-
-- **Revisor asignado:** Pablo García Gómez (`PG`).
-- **Puntos a validar en la PR:**
-  - [ ] ¿Son los umbrales de velocidad (150 líneas/min) realistas y justos?
-  - [ ] ¿Están cubiertos los principales asistentes del mercado (Copilot, ChatGPT, Claude, Cursor)?
-  - [ ] ¿Queda garantizado que no se penalizará erróneamente a programadores rápidos (principio pro-humano de T04)?
