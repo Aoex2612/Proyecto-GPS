@@ -12,7 +12,7 @@ Este documento establece la **especificación funcional y técnica de los criter
 ## 2. Principios Rectores
 
 1. **Determinismo sobre la duda**: La clasificación directa solo debe aplicarse cuando los datos ofrezcan certeza técnica.
-2. **Principio de No Penalización Errónea (In dubio pro humano)**: Si existe duda razonable o falta de evidencias concluyentes de uso de IA, la aportación **no** debe etiquetarse arbitrariamente como IA. Debe marcarse como `UNKNOWN` para su posterior auditoría humana (tratado en **T04**).
+2. **Principio de No Penalización Errónea**: Si existe duda razonable o falta de evidencias concluyentes de uso de IA, la aportación **no** debe etiquetarse arbitrariamente como IA. Debe marcarse como `UNKNOWN` para su posterior auditoría humana (tratado en **T04**).
 3. **Auditabilidad**: Todo dictamen de clasificación debe justificar qué criterio o regla se ha activado (metadato, heurística de velocidad o patrón textual).
 
 ---
@@ -68,7 +68,7 @@ Diseñados para detectar casos en los que un usuario humano genera el código co
 - **Exclusiones obligatorias (Filtro de falsos positivos)**:
   - Ficheros generados automáticamente por el entorno (`package-lock.json`, `yarn.lock`, bundles en `dist/`).
   - Ficheros de datos estáticos extensos (`.json`, `.csv`, `.svg`).
-  - Acciones de renombrado, formateo masivo o generación de _scaffolding_ de frameworks.
+  - Acciones de renombrado o formateo masivo de frameworks.
 
 #### B. Heurística de Firmas Textuales y Residuos de LLMs
 
