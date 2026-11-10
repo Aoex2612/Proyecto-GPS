@@ -2,7 +2,7 @@
  * Fachada del análisis de calidad (HU01 - T4)
  *
  * Responsable: Germán Peláez Gallardo (GG)
- * Revisor asignado (matriz P4): Félix Jiménez Almanza (FA)
+ * Revisor asignado: Félix Jiménez Almanza (FA)
  *
  * Orquesta el cliente de Sonar y el evaluador, devolviendo siempre un objeto
  * compatible con el contrato `quality` de HU01-T1. Los fallos de configuración

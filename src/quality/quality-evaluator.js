@@ -2,7 +2,7 @@
  * Módulo de evaluación de calidad (HU01 - T4)
  *
  * Responsable: Germán Peláez Gallardo (GG)
- * Revisor asignado (matriz P4): Félix Jiménez Almanza (FA)
+ * Revisor asignado: Félix Jiménez Almanza (FA)
  *
  * Convierte las medidas crudas de SonarCloud en el objeto `quality` que
  * consume el contrato de fases de HU01-T1. No realiza llamadas de red: toda
