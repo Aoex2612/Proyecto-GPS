@@ -15,12 +15,50 @@ inputs:
     description: 'Indica si la Action debe fallar el status check si se supera el umbral'
     required: false
     default: 'true'
+  sonar-enabled:
+    description: 'Activa el análisis de calidad y complejidad con SonarCloud'
+    required: false
+    default: 'false'
+  sonar-token:
+    description: 'Token de SonarCloud (configurar como secreto, nunca en el repositorio)'
+    required: false
+  sonar-host-url:
+    description: 'URL del servidor SonarCloud'
+    required: false
+    default: 'https://sonarcloud.io'
+  sonar-project-key:
+    description: 'Project key de SonarCloud (por defecto owner_repo)'
+    required: false
+  sonar-min-coverage:
+    description: 'Cobertura mínima exigida en porcentaje'
+    required: false
+    default: '80'
+  sonar-max-complexity:
+    description: 'Complejidad ciclomática máxima (vacío = sin límite)'
+    required: false
+    default: ''
+  sonar-max-duplication:
+    description: 'Duplicación máxima permitida en porcentaje'
+    required: false
+    default: '3'
+  sonar-quality-gate-required:
+    description: 'Si el Quality Gate en estado ERROR bloquea la entrega'
+    required: false
+    default: 'true'
+  fail-on-quality-gate:
+    description: 'Si la Action debe fallar cuando el Quality Gate no se cumple'
+    required: false
+    default: 'true'
 
 outputs:
   review-status:
-    description: 'Resultado del análisis de la entrega (passed, warning, failed)'
+    description: 'Resultado del análisis de la entrega (passed, warning, failed, skipped)'
   metrics-summary:
     description: 'Resumen en formato JSON de las métricas extraídas'
+  quality-status:
+    description: 'Resultado del análisis de calidad (passed, warning, failed, skipped)'
+  quality-summary:
+    description: 'Resumen en formato JSON del análisis de calidad'
 
 runs:
   using: 'node20'

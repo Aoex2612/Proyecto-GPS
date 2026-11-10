@@ -61,6 +61,28 @@ npm run format
 npm run build
 ```
 
+### 6. Calidad y complejidad (SonarCloud)
+
+El análisis de calidad se ejecuta en el job `quality` del pipeline y también
+puede reproducirse en local:
+
+```bash
+npm test
+
+SONAR_TOKEN=... \
+SONAR_PROJECT_KEY=Aoex2612_Proyecto-GPS \
+node src/quality/cli.js
+```
+
+Genera `quality-report.json` con el Quality Gate, complejidad, cobertura,
+duplicación, deuda técnica e issues abiertos. La configuración de SonarCloud
+está en `sonar-project.properties` y el diseño completo en
+[`docs/HU01-T04-sonarqube-calidad.md`](docs/HU01-T04-sonarqube-calidad.md).
+
+> SonarCloud requiere que el repositorio sea público o una licencia de pago.
+> Si no existe `SONAR_TOKEN`, el análisis queda en estado `skipped` y no bloquea
+> el pipeline.
+
 ---
 
 ## 🌳 Flujo de Trabajo en Git (GitFlow Simplificado)
@@ -109,11 +131,13 @@ Una tarea solo se considera **terminada** si cumple:
 │   ├── classifier/                # HU07: Clasificador de autoría (Humano / IA / Desconocido)
 │   ├── git/                       # HU01 / HU07: Extracción de metadatos de Git y commits
 │   ├── pipeline/                  # HU01: Contrato de fases del ciclo de entrega
+│   ├── quality/                   # HU01-T4: Cliente SonarCloud, umbrales y reporte
 │   ├── reporter/                  # HU08: Notificación en PRs y manejo de errores
 │   └── utils/                     # Utilidades comunes y logging
 ├── docs/                          # Documentación de diseño por tarea
 ├── tests/                         # Pruebas unitarias (Jest) y mocks
 ├── action.yml                     # Manifiesto de la GitHub Action
+├── sonar-project.properties       # Configuración de SonarCloud (HU01-T4)
 ├── package.json                   # Dependencias y scripts
 ├── .eslintrc.json                 # Reglas de linter
 └── .prettierrc                    # Configuración de formateo

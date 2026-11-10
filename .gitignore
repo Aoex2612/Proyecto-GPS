@@ -9,6 +9,10 @@ yarn-error.log*
 # Cobertura de pruebas
 coverage/
 
+# Artefactos de SonarQube y reportes de calidad
+.scannerwork/
+quality-report.json
+
 # Entornos y secretos
 .env
 .env.local
