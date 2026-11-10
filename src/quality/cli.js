@@ -2,7 +2,7 @@
  * CLI para generar `quality-report.json` desde el job de CI (HU01 - T4)
  *
  * Responsable: Germán Peláez Gallardo (GG)
- * Revisor asignado (matriz P4): Félix Jiménez Almanza (FA)
+ * Revisor asignado: Félix Jiménez Almanza (FA)
  *
  * Uso en el workflow:
  *   node src/quality/cli.js
