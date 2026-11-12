@@ -111,7 +111,7 @@ async function main() {
 }
 
 if (require.main === module) {
-  main();
+  void main();
 }
 
 module.exports = { buildConfigFromEnv, parseBoolean, parseNumber, runCli };

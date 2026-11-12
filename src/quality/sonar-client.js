@@ -103,6 +103,63 @@ function delay(ms) {
 }
 
 /**
+ * Construye la URL completa con parámetros de búsqueda.
+ * @param {string} baseUrl
+ * @param {string} pathname
+ * @param {object} params
+ * @returns {string}
+ */
+function buildUrl(baseUrl, pathname, params = {}) {
+  const url = new URL(`${baseUrl}${pathname}`);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  }
+  return url.toString();
+}
+
+/**
+ * Parsea la respuesta JSON de forma segura.
+ * @param {Response} response
+ * @returns {Promise<object>}
+ */
+async function parseJsonResponse(response) {
+  try {
+    return await response.json();
+  } catch (cause) {
+    throw new SonarError('Respuesta JSON inválida de SonarQube', 'INVALID_RESPONSE', {
+      cause,
+    });
+  }
+}
+
+/**
+ * Normaliza y clasifica errores de red y abortos.
+ * @param {Error} error
+ * @param {number} timeoutMs
+ * @param {string} token
+ * @returns {SonarError}
+ */
+function classifyNetworkError(error, timeoutMs, token) {
+  if (error instanceof SonarError) {
+    return error;
+  }
+  if (error.name === 'AbortError') {
+    return new SonarError(
+      `Tiempo de espera agotado tras ${timeoutMs} ms al consultar SonarQube`,
+      'TIMEOUT',
+      { cause: error },
+    );
+  }
+  return new SonarError(
+    `Error de red al consultar SonarQube: ${redactToken(error.message, token)}`,
+    'NETWORK_ERROR',
+    { cause: error },
+  );
+}
+
+/**
  * Crea un cliente de solo lectura contra la API de SonarCloud/SonarQube.
  * @param {object} options
  * @param {string} options.token - Token de Sonar (nunca se registra).
@@ -135,8 +192,50 @@ function createSonarClient({
     throw new SonarError('fetch no está disponible en este entorno', 'NO_FETCH');
   }
 
-  const baseUrl = String(hostUrl).replace(/\/+$/, '');
-  const authorization = `Basic ${Buffer.from(`${token}:`).toString('base64')}`;
+  let baseUrl = String(hostUrl);
+  while (baseUrl.endsWith('/')) {
+    baseUrl = baseUrl.slice(0, -1);
+  }
+  const basicCredentials = Buffer.from(token + ':').toString('base64');
+  const authorization = `Basic ${basicCredentials}`;
+
+  /**
+   * Ejecuta un intento individual de petición HTTP.
+   * @param {string} targetUrl
+   * @returns {Promise<{ok: boolean, data?: object, error?: SonarError, retryable: boolean}>}
+   */
+  async function executeAttempt(targetUrl) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await doFetch(targetUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: authorization,
+          Accept: 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const error = mapHttpError(response.status);
+        const retryable = response.status === 429 || response.status >= 500;
+        return { ok: false, error, retryable };
+      }
+
+      const data = await parseJsonResponse(response);
+      return { ok: true, data, retryable: false };
+    } catch (error) {
+      if (error instanceof SonarError) {
+        return { ok: false, error, retryable: false };
+      }
+      const normalized = classifyNetworkError(error, timeoutMs, token);
+      return { ok: false, error: normalized, retryable: true };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
   /**
    * Ejecuta una petición GET con autenticación, timeout y reintentos.
@@ -145,72 +244,21 @@ function createSonarClient({
    * @returns {Promise<object>}
    */
   async function request(pathname, params = {}) {
-    const url = new URL(`${baseUrl}${pathname}`);
-    for (const [key, value] of Object.entries(params)) {
-      if (value !== undefined && value !== null && value !== '') {
-        url.searchParams.set(key, String(value));
+    const targetUrl = buildUrl(baseUrl, pathname, params);
+
+    async function attemptRequest(attempt) {
+      const result = await executeAttempt(targetUrl);
+      if (result.ok) {
+        return result.data;
       }
+      if (result.retryable && attempt < maxRetries) {
+        await delay(retryDelayMs);
+        return attemptRequest(attempt + 1);
+      }
+      throw result.error;
     }
 
-    let lastError = null;
-
-    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-      try {
-        const response = await doFetch(url.toString(), {
-          method: 'GET',
-          headers: {
-            Authorization: authorization,
-            Accept: 'application/json',
-          },
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          if ((response.status === 429 || response.status >= 500) && attempt < maxRetries) {
-            lastError = mapHttpError(response.status);
-            await delay(retryDelayMs);
-            continue;
-          }
-          throw mapHttpError(response.status);
-        }
-
-        try {
-          return await response.json();
-        } catch (cause) {
-          throw new SonarError('Respuesta JSON inválida de SonarQube', 'INVALID_RESPONSE', {
-            cause,
-          });
-        }
-      } catch (error) {
-        if (error instanceof SonarError) {
-          throw error;
-        }
-        if (error.name === 'AbortError') {
-          throw new SonarError(
-            `Tiempo de espera agotado tras ${timeoutMs} ms al consultar SonarQube`,
-            'TIMEOUT',
-            { cause: error },
-          );
-        }
-        if (attempt < maxRetries) {
-          lastError = error;
-          await delay(retryDelayMs);
-          continue;
-        }
-        throw new SonarError(
-          `Error de red al consultar SonarQube: ${redactToken(error.message, token)}`,
-          'NETWORK_ERROR',
-          { cause: error },
-        );
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
-    throw lastError || new SonarError('Error desconocido al consultar SonarQube', 'UNKNOWN');
+    return attemptRequest(0);
   }
 
   /**
@@ -232,7 +280,7 @@ function createSonarClient({
       component: projectKey,
       metricKeys: metricKeys.join(','),
     });
-    return (body.component && body.component.measures) || [];
+    return body.component?.measures || [];
   }
 
   /**
