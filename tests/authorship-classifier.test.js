@@ -1,11 +1,15 @@
 const {
   AuthorshipOrigin,
   CLASSIFICATION_CRITERIA,
+  classifyContribution,
   classifyOrigin,
   checkMetadataCriteria,
   checkTextualPatterns,
+  computeVelocityStats,
   hasVelocityAnomaly,
 } = require('../src/classifier/authorship-classifier');
+
+const { parseCommitMetadata } = require('../src/git/metadata-parser');
 
 const { HUMAN, AI_ASSISTED, UNKNOWN } = AuthorshipOrigin;
 
@@ -115,6 +119,23 @@ describe('HU07-T03 - Clasificación de cada aportación según su origen', () =>
 
       expect(classifyOrigin(contribution)).toBe(AI_ASSISTED);
     });
+
+    test('no marca como IA un comentario humano normal en inglés', () => {
+      const contribution = createHumanContribution({
+        content: '+// This function handles retries for the upload',
+      });
+
+      expect(checkTextualPatterns(contribution)).toBeNull();
+      expect(classifyOrigin(contribution)).toBe(HUMAN);
+    });
+
+    test('no marca como IA una frase conversacional fuera de un comentario', () => {
+      const contribution = createHumanContribution({
+        content: "+const note = 'here is the implementation of the parser';",
+      });
+
+      expect(classifyOrigin(contribution)).toBe(HUMAN);
+    });
   });
 
   describe('Heurística de velocidad sobrehumana (Nivel 2)', () => {
@@ -124,6 +145,10 @@ describe('HU07-T03 - Clasificación de cada aportación según su origen', () =>
 
     test('no marca anomalía dentro de un ritmo humano', () => {
       expect(hasVelocityAnomaly({ stats: { additions: 100, elapsedMinutes: 10 } })).toBe(false);
+    });
+
+    test('sin referencia temporal no hay anomalía (in dubio pro humano)', () => {
+      expect(hasVelocityAnomaly({ stats: { additions: 5000, elapsedMinutes: 0 } })).toBe(false);
     });
 
     test('una anomalía de velocidad sin confirmación textual se deriva a UNKNOWN', () => {
@@ -180,6 +205,125 @@ describe('HU07-T03 - Clasificación de cada aportación según su origen', () =>
 
     test('un correo mal formado se clasifica como desconocida', () => {
       expect(classifyOrigin({ author: { name: 'Jorge', email: 'jorge-arroba' } })).toBe(UNKNOWN);
+    });
+
+    test('un committer ausente se clasifica como desconocida', () => {
+      const contribution = createHumanContribution({ committer: null });
+
+      expect(classifyOrigin(contribution)).toBe(UNKNOWN);
+      expect(classifyContribution(contribution).rule).toBe('invalid-identity');
+    });
+
+    test('un committer con correo mal formado se clasifica como desconocida', () => {
+      const contribution = createHumanContribution({
+        committer: { name: 'Jorge Torres', email: 'jorge-arroba' },
+      });
+
+      expect(classifyOrigin(contribution)).toBe(UNKNOWN);
+    });
+  });
+
+  describe('Trazabilidad del dictamen (T1 §2.3 y §6)', () => {
+    test('devuelve origen, regla y motivo cuando se activa un metadato de IA', () => {
+      const result = classifyContribution(
+        createHumanContribution({ trailers: { 'Generated-by': 'ChatGPT' } }),
+      );
+
+      expect(result).toEqual({
+        origin: AI_ASSISTED,
+        rule: 'ai-trailer',
+        reason: expect.stringContaining('Generated-by'),
+      });
+    });
+
+    test('devuelve origen, regla y motivo cuando se activa una firma textual', () => {
+      const result = classifyContribution(createHumanContribution({ content: '// ```js' }));
+
+      expect(result.origin).toBe(AI_ASSISTED);
+      expect(result.rule).toBe('ai-text-residue');
+      expect(result.reason).toEqual(expect.any(String));
+    });
+
+    test('el motivo de UNKNOWN por velocidad describe la anomalía', () => {
+      const result = classifyContribution(
+        createHumanContribution({ stats: { additions: 1000, elapsedMinutes: 2 } }),
+      );
+
+      expect(result.origin).toBe(UNKNOWN);
+      expect(result.rule).toBe('velocity-anomaly');
+      expect(result.reason).toContain('500 líneas/min');
+    });
+
+    test('una aportación humana lleva su regla y motivo', () => {
+      const result = classifyContribution(createHumanContribution());
+
+      expect(result).toEqual({
+        origin: HUMAN,
+        rule: 'no-ai-evidence',
+        reason: expect.any(String),
+      });
+    });
+  });
+
+  describe('Cálculo de velocidad a partir de los commits de T2 (Nivel 2)', () => {
+    const author = { name: 'Jorge Torres', email: 'jorge@example.com' };
+
+    function createGithubCommit({ sha, date, additions }) {
+      return {
+        sha,
+        author: { login: 'Joalts8', type: 'User' },
+        commit: { author: { ...author, date }, committer: { ...author, date }, message: `feat: ${sha}` },
+        files: [
+          { filename: 'package-lock.json', additions: 5000 },
+          { filename: 'src/app.js', additions },
+        ],
+      };
+    }
+
+    test('calcula las líneas añadidas excluyendo ficheros generados', () => {
+      const { commits } = parseCommitMetadata({
+        commits: [createGithubCommit({ sha: 'a', date: '2026-11-10T09:00:00Z', additions: 12 })],
+      });
+
+      expect(computeVelocityStats(commits)[0].stats).toEqual({ additions: 12, elapsedMinutes: 0 });
+    });
+
+    test('mide los minutos transcurridos entre commits consecutivos', () => {
+      const { commits } = parseCommitMetadata({
+        commits: [
+          createGithubCommit({ sha: 'a', date: '2026-11-10T09:00:00Z', additions: 20 }),
+          createGithubCommit({ sha: 'b', date: '2026-11-10T09:02:00Z', additions: 30 }),
+        ],
+      });
+
+      const enriched = computeVelocityStats(commits);
+
+      expect(enriched[1].stats).toEqual({ additions: 30, elapsedMinutes: 2 });
+      expect(hasVelocityAnomaly(enriched[1])).toBe(false);
+    });
+
+    test('un ritmo sobrehumano real acaba derivando a UNKNOWN', () => {
+      const { commits } = parseCommitMetadata({
+        commits: [
+          createGithubCommit({ sha: 'a', date: '2026-11-10T09:00:00Z', additions: 20 }),
+          createGithubCommit({ sha: 'b', date: '2026-11-10T09:00:30Z', additions: 2000 }),
+        ],
+      });
+
+      const result = classifyContribution(computeVelocityStats(commits)[1]);
+
+      expect(result.origin).toBe(UNKNOWN);
+      expect(result.rule).toBe('velocity-anomaly');
+    });
+
+    test('el cálculo no muta los commits originales', () => {
+      const { commits } = parseCommitMetadata({
+        commits: [createGithubCommit({ sha: 'a', date: '2026-11-10T09:00:00Z', additions: 12 })],
+      });
+
+      computeVelocityStats(commits);
+
+      expect(commits[0].stats).toBeUndefined();
     });
   });
 

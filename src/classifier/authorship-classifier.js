@@ -1,8 +1,8 @@
 /**
  * Módulo de Clasificación de Autoría (HU07 - T1 / T3 / T4 / T5)
  *
- * Responsable asignado en Sprint 1: Alejandro Jesús Ortiz Zamora (AZ) / Jorge Torres Sánchez (JS)
- * Revisor asignado: Pablo García Gómez (PG) / Candela Marco Jiménez (CJ)
+ * Responsable asignado en Sprint 1: Jorge Torres Sánchez (JS)
+ * Revisor asignado: Candela Marco Jiménez (CJ)
  */
 
 const AuthorshipOrigin = Object.freeze({
@@ -39,17 +39,28 @@ const CLASSIFICATION_CRITERIA = Object.freeze({
     /Co-authored-by:.*(?:copilot|claude|cursor|chatgpt|tabnine|codeium)/i,
   ]),
 
+  /**
+   * Residuos inequívocos de un chat de LLM: se buscan en todo el contenido.
+   */
   AI_TEXT_PATTERNS: Object.freeze([
     /\/\/\s*```\w+/,
     /\/\*\s*```\w+\s*\*\//,
     /#\s*```(?:python|py|bash|sh|ruby|rb)/i,
+  ]),
+
+  /**
+   * Frases de cortesía que sólo son sospechosas si están dentro de un comentario.
+   * Se aplican sobre las líneas de comentario, no sobre el código completo.
+   * `this function handles` se excluye a propósito: es indistinguible de una
+   * descripción humana normal en inglés y penalizaría código legítimo (T1 §2.2).
+   */
+  AI_CONVERSATIONAL_PATTERNS: Object.freeze([
     /here is the (?:code|implementation|solution|function|refactor)/i,
     /aquí (?:tienes|está) la (?:implementación|función|solución|código)/i,
     /note:\s*make sure to/i,
     /nota:\s*asegúrate de/i,
     /as an ai(?:\s+language\s+model)?/i,
     /como modelo de lenguaje(?:\s+ia)?/i,
-    /this function handles/i,
   ]),
 
   EXCLUDED_FILE_PATTERNS: Object.freeze([
@@ -110,24 +121,35 @@ function isAiIdentity(identity = {}) {
 }
 
 /**
- * Evalúa los criterios deterministas de metadatos (Nivel 1).
+ * Reglas que se evalúan en el Nivel 1, con su motivo auditable (T1 §2.3).
  * @param {object} contribution
- * @returns {string|null} AuthorshipOrigin.AI_ASSISTED si se detecta IA, o null.
+ * @returns {{ rule: string, reason: string }|null}
  */
-function checkMetadataCriteria(contribution = {}) {
+function findMetadataMatch(contribution = {}) {
   const { author = {}, committer = {}, coAuthors = [], trailers = {}, message = '' } = contribution;
 
-  if (isBotIdentity(author) || isBotIdentity(committer)) {
-    return AuthorshipOrigin.AI_ASSISTED;
+  if (isBotIdentity(author)) {
+    return { rule: 'bot-identity', reason: 'El autor es un bot o cuenta de servicio.' };
   }
 
-  if (isAiIdentity(author) || isAiIdentity(committer)) {
-    return AuthorshipOrigin.AI_ASSISTED;
+  if (isBotIdentity(committer)) {
+    return { rule: 'bot-identity', reason: 'El committer es un bot o cuenta de servicio.' };
+  }
+
+  if (isAiIdentity(author)) {
+    return { rule: 'ai-identity', reason: 'El autor es una identidad de herramienta de IA.' };
+  }
+
+  if (isAiIdentity(committer)) {
+    return { rule: 'ai-identity', reason: 'El committer es una identidad de herramienta de IA.' };
   }
 
   for (const coAuthor of coAuthors || []) {
     if (isBotIdentity(coAuthor) || isAiIdentity(coAuthor)) {
-      return AuthorshipOrigin.AI_ASSISTED;
+      return {
+        rule: 'ai-coauthor',
+        reason: `Co-autoría declarada con una herramienta de IA (${coAuthor.name || coAuthor.email}).`,
+      };
     }
   }
 
@@ -136,12 +158,8 @@ function checkMetadataCriteria(contribution = {}) {
       continue;
     }
 
-    if (/^(?:generated-by|assisted-by)$/i.test(key)) {
-      return AuthorshipOrigin.AI_ASSISTED;
-    }
-
-    if (/true|yes|1/i.test(String(value))) {
-      return AuthorshipOrigin.AI_ASSISTED;
+    if (/^(?:generated-by|assisted-by)$/i.test(key) || /true|yes|1/i.test(String(value))) {
+      return { rule: 'ai-trailer', reason: `Trailer explícito de IA en el commit: ${key}.` };
     }
   }
 
@@ -149,7 +167,62 @@ function checkMetadataCriteria(contribution = {}) {
     typeof message === 'string' &&
     CLASSIFICATION_CRITERIA.AI_MESSAGE_PATTERNS.some((pattern) => pattern.test(message))
   ) {
-    return AuthorshipOrigin.AI_ASSISTED;
+    return { rule: 'ai-message-marker', reason: 'Marcador explícito de IA en el mensaje del commit.' };
+  }
+
+  return null;
+}
+
+/**
+ * Evalúa los criterios deterministas de metadatos (Nivel 1).
+ * @param {object} contribution
+ * @returns {string|null} AuthorshipOrigin.AI_ASSISTED si se detecta IA, o null.
+ */
+function checkMetadataCriteria(contribution = {}) {
+  return findMetadataMatch(contribution) ? AuthorshipOrigin.AI_ASSISTED : null;
+}
+
+const COMMENT_LINE_PATTERN = /^\s*(?:\/\/|\/\*|\*|#|<!--)/;
+
+/**
+ * Indica si una línea del diff es un comentario.
+ * @param {string} line
+ * @returns {boolean}
+ */
+function isCommentLine(line) {
+  return COMMENT_LINE_PATTERN.test(String(line).replace(/^[+-]/, ''));
+}
+
+/**
+ * Firmas textuales de LLM (Nivel 2), separando los residuos inequívocos de las
+ * frases conversacionales que sólo cuentan dentro de un comentario.
+ * @param {object} contribution
+ * @returns {{ rule: string, reason: string }|null}
+ */
+function findTextualMatch(contribution = {}) {
+  const content = contribution.content || contribution.diff || contribution.patch || '';
+
+  if (typeof content !== 'string' || content.length === 0) {
+    return null;
+  }
+
+  if (CLASSIFICATION_CRITERIA.AI_TEXT_PATTERNS.some((pattern) => pattern.test(content))) {
+    return { rule: 'ai-text-residue', reason: 'Residuo de bloque Markdown de un chat de LLM.' };
+  }
+
+  const commentText = content
+    .split(/\r?\n/)
+    .filter(isCommentLine)
+    .join('\n');
+
+  if (
+    commentText.length > 0 &&
+    CLASSIFICATION_CRITERIA.AI_CONVERSATIONAL_PATTERNS.some((pattern) => pattern.test(commentText))
+  ) {
+    return {
+      rule: 'ai-conversational-comment',
+      reason: 'Frase conversacional de LLM en un comentario del código.',
+    };
   }
 
   return null;
@@ -161,17 +234,7 @@ function checkMetadataCriteria(contribution = {}) {
  * @returns {string|null} AuthorshipOrigin.AI_ASSISTED si se detecta una firma, o null.
  */
 function checkTextualPatterns(contribution = {}) {
-  const content = contribution.content || contribution.diff || contribution.patch || '';
-
-  if (typeof content !== 'string' || content.length === 0) {
-    return null;
-  }
-
-  const hasAiSignature = CLASSIFICATION_CRITERIA.AI_TEXT_PATTERNS.some((pattern) =>
-    pattern.test(content),
-  );
-
-  return hasAiSignature ? AuthorshipOrigin.AI_ASSISTED : null;
+  return findTextualMatch(contribution) ? AuthorshipOrigin.AI_ASSISTED : null;
 }
 
 /**
@@ -201,25 +264,110 @@ function getEligibleAdditions(stats = {}) {
 }
 
 /**
+ * Calcula las líneas por minuto de una aportación.
+ * @param {object} stats
+ * @returns {number}
+ */
+function getVelocityRate(stats = {}) {
+  const additions = getEligibleAdditions(stats);
+  const elapsedMinutes = Number(stats?.elapsedMinutes) || 0;
+
+  if (additions <= 0 || elapsedMinutes <= 0) {
+    return 0;
+  }
+
+  return additions / elapsedMinutes;
+}
+
+/**
  * Detecta un ritmo de adición de código sobrehumano (Nivel 2).
  * @param {object} contribution
  * @returns {boolean}
  */
 function hasVelocityAnomaly(contribution = {}) {
-  const stats = contribution.stats;
-
-  if (!stats) {
+  if (!contribution.stats) {
     return false;
   }
 
-  const additions = getEligibleAdditions(stats);
-  const elapsedMinutes = Number(stats.elapsedMinutes) || 0;
+  return getVelocityRate(contribution.stats) > CLASSIFICATION_CRITERIA.MAX_HUMAN_LINES_PER_MINUTE;
+}
 
-  if (additions <= 0 || elapsedMinutes <= 0) {
-    return false;
+/**
+ * Añade `stats` a cada commit (T1 §4.2.A): líneas añadidas computables y
+ * minutos transcurridos desde el commit anterior.
+ * El primer commit no tiene referencia temporal, así que su velocidad es 0
+ * (in dubio pro humano).
+ * @param {Array<object>} commits - Commits tal y como los devuelve metadata-parser (T2).
+ * @returns {Array<object>} Los mismos commits con `stats`.
+ */
+function computeVelocityStats(commits = []) {
+  const list = Array.isArray(commits) ? commits : [];
+
+  return list.map((commit, index) => {
+    const current = Date.parse(commit?.date);
+    const previous = Date.parse(list[index - 1]?.date);
+    const elapsedMinutes =
+      Number.isFinite(current) && Number.isFinite(previous) && current > previous
+        ? (current - previous) / 60000
+        : 0;
+
+    return {
+      ...commit,
+      stats: {
+        additions: getEligibleAdditions({ files: commit?.files }),
+        elapsedMinutes,
+      },
+    };
+  });
+}
+
+/**
+ * Clasifica la autoría de una aportación y explica qué regla se activó (HU07-T03).
+ * @param {object} contribution - Objeto con datos de autor, committer y contenido
+ * @returns {{ origin: string, rule: string, reason: string }}
+ */
+function classifyContribution(contribution = {}) {
+  if (!contribution || !hasValidIdentity(contribution.author)) {
+    return {
+      origin: AuthorshipOrigin.UNKNOWN,
+      rule: 'invalid-identity',
+      reason: 'El autor no tiene una identidad válida (nombre y correo) (T1 §5.1).',
+    };
   }
 
-  return additions / elapsedMinutes > CLASSIFICATION_CRITERIA.MAX_HUMAN_LINES_PER_MINUTE;
+  if (!hasValidIdentity(contribution.committer)) {
+    return {
+      origin: AuthorshipOrigin.UNKNOWN,
+      rule: 'invalid-identity',
+      reason: 'El committer no tiene una identidad válida (nombre y correo) (T1 §5.1).',
+    };
+  }
+
+  const metadataMatch = findMetadataMatch(contribution);
+  if (metadataMatch) {
+    return { origin: AuthorshipOrigin.AI_ASSISTED, ...metadataMatch };
+  }
+
+  const textualMatch = findTextualMatch(contribution);
+  if (textualMatch) {
+    return { origin: AuthorshipOrigin.AI_ASSISTED, ...textualMatch };
+  }
+
+  if (hasVelocityAnomaly(contribution)) {
+    return {
+      origin: AuthorshipOrigin.UNKNOWN,
+      rule: 'velocity-anomaly',
+      reason: `Anomalía de velocidad (${Math.round(
+        getVelocityRate(contribution.stats),
+      )} líneas/min > ${CLASSIFICATION_CRITERIA.MAX_HUMAN_LINES_PER_MINUTE}) sin confirmación textual (T1 §6).`,
+    };
+  }
+
+  return {
+    origin: AuthorshipOrigin.HUMAN,
+    rule: 'no-ai-evidence',
+    reason: 'Identidades válidas y sin metadatos, firmas ni velocidad anómala de IA.',
+  };
 }
 
 /**
@@ -228,23 +376,7 @@ function hasVelocityAnomaly(contribution = {}) {
  * @returns {string} Valor de AuthorshipOrigin (HUMAN, AI_ASSISTED o UNKNOWN)
  */
 function classifyOrigin(contribution = {}) {
-  if (!contribution || !hasValidIdentity(contribution.author)) {
-    return AuthorshipOrigin.UNKNOWN;
-  }
-
-  if (checkMetadataCriteria(contribution)) {
-    return AuthorshipOrigin.AI_ASSISTED;
-  }
-
-  if (checkTextualPatterns(contribution)) {
-    return AuthorshipOrigin.AI_ASSISTED;
-  }
-
-  if (hasVelocityAnomaly(contribution)) {
-    return AuthorshipOrigin.UNKNOWN;
-  }
-
-  return AuthorshipOrigin.HUMAN;
+  return classifyContribution(contribution).origin;
 }
 
 module.exports = {
@@ -256,5 +388,7 @@ module.exports = {
   checkMetadataCriteria,
   checkTextualPatterns,
   hasVelocityAnomaly,
+  computeVelocityStats,
+  classifyContribution,
   classifyOrigin,
 };
