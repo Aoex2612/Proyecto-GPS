@@ -40,6 +40,7 @@ describe('HU01-T2 - Procesos implicados en la subida', () => {
 
   test('los órdenes de proceso son únicos y en secuencia ascendente', () => {
     const orders = UPLOAD_PROCESSES.map((p) => p.order);
+    expect(new Set(orders).size).toBe(orders.length);
     for (let i = 1; i < orders.length; i++) {
       expect(orders[i]).toBeGreaterThan(orders[i - 1]);
     }
@@ -155,6 +156,33 @@ describe('HU01-T2 - Procesos implicados en la subida', () => {
     expect(validation.valid).toBe(true);
     expect(validation.missingEvents).toEqual([]);
     expect(validation.extraEvents).toEqual([]);
+  });
+
+  test('validateAgainstTriggerEvents detecta eventos faltantes en el catálogo (missingEvents)', () => {
+    // Simulamos un catálogo donde falta 'ready_for_review'
+    const incompleteProcesses = UPLOAD_PROCESSES.filter((p) => p.eventType !== 'ready_for_review');
+    const validation = validateAgainstTriggerEvents(incompleteProcesses);
+
+    expect(validation.valid).toBe(false);
+    expect(validation.missingEvents).toEqual(['ready_for_review']);
+    expect(validation.extraEvents).toEqual([]);
+  });
+
+  test('validateAgainstTriggerEvents detecta eventos catalogados de más (extraEvents)', () => {
+    // Simulamos un catálogo con un evento no contemplado en el contrato de T1
+    const extraProcess = {
+      id: 'pr-labeled',
+      phase: DeliveryPhase.PULL_REQUEST,
+      type: ProcessType.GITHUB_EVENT,
+      event: 'pull_request',
+      eventType: 'labeled',
+    };
+    const processesWithExtra = [...UPLOAD_PROCESSES, extraProcess];
+    const validation = validateAgainstTriggerEvents(processesWithExtra);
+
+    expect(validation.valid).toBe(false);
+    expect(validation.missingEvents).toEqual([]);
+    expect(validation.extraEvents).toEqual(['labeled']);
   });
 
   // ────────────────────────────────────────────────────────────────────────

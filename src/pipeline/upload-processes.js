@@ -165,18 +165,23 @@ function getProcess(id) {
 /**
  * Verifica que los eventos de GitHub catalogados aquí son coherentes con los
  * TRIGGER_EVENTS definidos en el contrato de T1.
+ * @param {Array<object>} [processes=UPLOAD_PROCESSES] - Lista de procesos a validar.
+ * @param {object} [triggerEvents=TRIGGER_EVENTS] - Contrato de triggers de T1.
  * @returns {{ valid: boolean, missingEvents: string[], extraEvents: string[] }}
  */
-function validateAgainstTriggerEvents() {
-  const prProcesses = UPLOAD_PROCESSES.filter(
+function validateAgainstTriggerEvents(
+  processes = UPLOAD_PROCESSES,
+  triggerEvents = TRIGGER_EVENTS,
+) {
+  const prProcesses = processes.filter(
     (p) => p.type === ProcessType.GITHUB_EVENT && p.event === 'pull_request' && p.eventType,
   );
 
   const catalogedTypes = prProcesses.map((p) => p.eventType);
-  const contractTypes = TRIGGER_EVENTS.pull_request.types;
+  const contractTypes = triggerEvents.pull_request.types;
 
-  const missingEvents = catalogedTypes.filter((t) => !contractTypes.includes(t));
-  const extraEvents = contractTypes.filter((t) => !catalogedTypes.includes(t));
+  const missingEvents = contractTypes.filter((t) => !catalogedTypes.includes(t));
+  const extraEvents = catalogedTypes.filter((t) => !contractTypes.includes(t));
 
   return {
     valid: missingEvents.length === 0 && extraEvents.length === 0,

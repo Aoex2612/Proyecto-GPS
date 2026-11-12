@@ -91,8 +91,10 @@ comandos Git, eventos de GitHub y acciones automáticas de CI** en las fases
 ## 4. Coherencia con el contrato de T1
 
 La función `validateAgainstTriggerEvents()` comprueba en tiempo de ejecución que
-los eventos catalogados en `UPLOAD_PROCESSES` son exactamente los esperados por
-`TRIGGER_EVENTS` definidos en `src/pipeline/phases.js`.
+los eventos de tipo `pull_request` catalogados en `UPLOAD_PROCESSES` coinciden
+exactamente con `TRIGGER_EVENTS.pull_request` definidos en `src/pipeline/phases.js`.
+
+> **Nota de alcance sobre `push-to-protected`**: La validación automatizada cubre los tipos de evento de Pull Request que disparan el análisis en la entrega. El proceso `push-to-protected` corresponde a la fase `push` posterior a la integración en ramas protegidas (`develop`/`main`) y se documenta en el catálogo sin subtipos asociados, por lo que queda fuera del alcance de `validateAgainstTriggerEvents()`.
 
 ## 5. Contrato con HU01-T5
 
