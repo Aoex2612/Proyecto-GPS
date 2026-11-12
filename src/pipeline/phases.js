@@ -48,7 +48,7 @@ const DELIVERY_PHASES = deepFreeze([
     automated: true,
   },
   {
-    id: DeliveryPhase.ANALYSIS,
+    id: DeliveryPhase.ANALYSIS, // T4
     order: 4,
     name: 'Análisis automático',
     description:
