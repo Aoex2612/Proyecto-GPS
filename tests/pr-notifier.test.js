@@ -72,6 +72,27 @@ describe('HU08-T03 - Publicar la información de las revisiones', () => {
       expect(body).toContain('umbral 50%');
     });
 
+    test('trata un umbral vacío, nulo o no numérico como el valor por defecto', () => {
+      const authorship = { total: 2, human: 1, aiAssisted: 1 };
+
+      expect(buildReportBody({ authorship, thresholdAi: '' })).toContain('umbral 50%');
+      expect(buildReportBody({ authorship, thresholdAi: null })).toContain('umbral 50%');
+      expect(buildReportBody({ authorship, thresholdAi: 'alto' })).toContain('umbral 50%');
+    });
+
+    test('no declara «dentro del umbral» cuando no hay datos que clasificar', () => {
+      const body = buildReportBody({});
+
+      expect(body).toContain('Sin datos para clasificar');
+      expect(body).not.toContain('Dentro del umbral');
+    });
+
+    test('no duplica la marca si el cuerpo ya la incluye', () => {
+      expect(buildReportBody({ body: `Informe\n\n${REPORT_MARKER}` })).toBe(
+        `Informe\n\n${REPORT_MARKER}`,
+      );
+    });
+
     test('acota el umbral al rango 0-100', () => {
       const body = buildReportBody({
         authorship: { total: 1, human: 0, aiAssisted: 1, unknown: 0 },

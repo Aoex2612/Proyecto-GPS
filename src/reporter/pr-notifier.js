@@ -29,6 +29,10 @@ function toCount(value) {
  * @returns {number}
  */
 function normalizeThreshold(value) {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return DEFAULT_AI_THRESHOLD;
+  }
+
   const threshold = Number(value);
   if (!Number.isFinite(threshold)) {
     return DEFAULT_AI_THRESHOLD;
@@ -49,7 +53,10 @@ function buildReportSummary(report = {}) {
   const total = toCount(authorship.total) || human + aiAssisted + unknown;
   const threshold = normalizeThreshold(report.thresholdAi);
   const aiPercentage = total > 0 ? Number(((aiAssisted / total) * 100).toFixed(1)) : 0;
-  const verdict = aiPercentage <= threshold ? 'Dentro del umbral' : 'Revisión requerida';
+  let verdict = 'Sin datos para clasificar';
+  if (total > 0) {
+    verdict = aiPercentage <= threshold ? 'Dentro del umbral' : 'Revisión requerida';
+  }
 
   return [
     '## Informe de autoría',
@@ -75,7 +82,7 @@ function buildReportBody(report = {}) {
       ? report.body.trim()
       : buildReportSummary(report);
 
-  return `${body}\n\n${REPORT_MARKER}`;
+  return body.includes(REPORT_MARKER) ? body : `${body}\n\n${REPORT_MARKER}`;
 }
 
 /**
