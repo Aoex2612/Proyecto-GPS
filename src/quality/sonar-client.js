@@ -103,7 +103,7 @@ function delay(ms) {
 }
 
 /**
- * Construye la URL completa con parámetros de búsqueda.
+ * Construye la URL completa con parámetros de búsqueda
  * @param {string} baseUrl
  * @param {string} pathname
  * @param {object} params
