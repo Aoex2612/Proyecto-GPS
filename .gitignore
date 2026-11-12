@@ -21,3 +21,4 @@ coverage/
 # Compilados de distribución
 # dist/ se empaquetará con npm run build para las releases de la Action
 dist/
+opencode.json
