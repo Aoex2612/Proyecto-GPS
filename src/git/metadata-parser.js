@@ -94,6 +94,10 @@ function parseCommitMetadata(options = {}) {
     const author = normalizeIdentity(gitCommit.author, commit.author);
     const committer = normalizeIdentity(gitCommit.committer, commit.committer);
     const coAuthors = parseCoAuthors(trailers);
+    const files = (commit.files || []).map((file) => ({
+      filename: file.filename || null,
+      additions: Number(file.additions) || 0,
+    }));
     const diff = (commit.files || [])
       .map((file) => file.patch)
       .filter((patch) => typeof patch === 'string' && patch.length > 0)
@@ -106,6 +110,8 @@ function parseCommitMetadata(options = {}) {
       coAuthors,
       trailers,
       message,
+      date: gitCommit.author?.date || gitCommit.committer?.date || null,
+      files,
       diff,
     });
 
