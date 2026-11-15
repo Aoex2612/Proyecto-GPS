@@ -13,12 +13,16 @@ describe('parseCommitMetadata', () => {
           author: { login: 'octocat', type: 'User' },
           committer: { login: 'github-actions[bot]', type: 'Bot' },
           commit: {
-            author: { name: 'Octo Cat', email: 'octo@example.com' },
+            author: {
+              name: 'Octo Cat',
+              email: 'octo@example.com',
+              date: '2026-11-10T09:00:00Z',
+            },
             committer: { name: 'GitHub Actions', email: 'actions@users.noreply.github.com' },
             message:
               'Add feature\n\nCo-authored-by: AI Assistant <ai@example.com>\nReviewed-by: Reviewer <reviewer@example.com>',
           },
-          files: [{ filename: 'src/feature.js', patch: '+const feature = true;' }],
+          files: [{ filename: 'src/feature.js', additions: 5, patch: '+const feature = true;' }],
         },
       ],
     });
@@ -55,6 +59,8 @@ describe('parseCommitMetadata', () => {
         },
         message:
           'Add feature\n\nCo-authored-by: AI Assistant <ai@example.com>\nReviewed-by: Reviewer <reviewer@example.com>',
+        date: '2026-11-10T09:00:00Z',
+        files: [{ filename: 'src/feature.js', additions: 5 }],
         diff: '+const feature = true;',
       },
     ]);
@@ -95,6 +101,34 @@ describe('parseCommitMetadata', () => {
         userType: null,
         isBot: false,
       },
+    ]);
+  });
+
+  test('exposes the commit date and per-file additions for the velocity heuristic', () => {
+    const result = parseCommitMetadata({
+      commits: [
+        {
+          sha: 'stats',
+          commit: {
+            committer: {
+              name: 'Octo Cat',
+              email: 'octo@example.com',
+              date: '2026-11-10T10:00:00Z',
+            },
+            message: 'Change',
+          },
+          files: [
+            { filename: 'package-lock.json', additions: 900 },
+            { filename: 'src/app.js', additions: 12 },
+          ],
+        },
+      ],
+    });
+
+    expect(result.commits[0].date).toBe('2026-11-10T10:00:00Z');
+    expect(result.commits[0].files).toEqual([
+      { filename: 'package-lock.json', additions: 900 },
+      { filename: 'src/app.js', additions: 12 },
     ]);
   });
 
