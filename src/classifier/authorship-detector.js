@@ -153,7 +153,8 @@ function detectAuthorship(options = {}) {
     );
   }
 
-  const status = exceedsThreshold ? 'review_required' : 'passed';
+  const requiresReview = exceedsThreshold || unknownCount > 0;
+  const status = requiresReview ? 'review_required' : 'passed';
 
   const normalizedDelivery = {
     repository: delivery?.repository || null,

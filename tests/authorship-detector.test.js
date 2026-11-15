@@ -261,6 +261,8 @@ describe('HU01-T03 - Sistema de detección de procedencia del código con metada
       const result = detectAuthorship({ commits: rawCommits });
 
       expect(result.authorship.unknown).toBe(1);
+      expect(result.verdict.status).toBe('review_required');
+      expect(result.verdict.exceedsThreshold).toBe(false);
       expect(
         result.verdict.reasons.some((r) => r.includes('desconocida') || r.includes('UNKNOWN')),
       ).toBe(true);

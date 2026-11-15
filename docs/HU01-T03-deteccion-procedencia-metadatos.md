@@ -159,7 +159,7 @@ especificación del contrato de datos de HU01-T1:
 | Criterio de la HU01                                     | Cómo lo satisface la implementación de HU01-T3                                                                                                                                  |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Evaluación automática sin intervención manual**       | `detectAuthorship` procesa los metadatos de Git de forma completamente desatendida mediante reglas formales y heurísticas auditables.                                           |
-| **Notificación clara del estado sin bloqueos espurios** | Emite un dictamen estructurado (`status`: `passed` / `review_required`) diferenciando código humano, asistido y desconocido con justificación explícita de cada regla activada. |
+| **Notificación clara del estado sin bloqueos espurios** | Emite un dictamen estructurado (`status`: `passed` / `review_required`) diferenciando código humano, asistido y desconocido con justificación explícita de cada regla activada. Cualquier aportación `UNKNOWN` deja el estado en `review_required` para auditoría humana. |
 | **Límites de tiempo y eficiencia**                      | La detección y agregación en memoria se ejecuta en milisegundos sin llamadas externas adicionales ni bloqueos I/O.                                                              |
 
 ## 8. Referencias
