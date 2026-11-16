@@ -1,4 +1,5 @@
 # Criterios para la Distinción de Aportaciones Humanas y Automatizadas
+
 ## 1. Objetivo y Contexto
 
 En el marco de la **HU07**, el objetivo primordial es:
@@ -104,3 +105,23 @@ En concordancia con el principio de no penalización errónea:
   - **No se clasificará directamente como IA.**
   - Se derivará a **`UNKNOWN`** con un motivo asociado (_"anomalía de velocidad sin confirmación textual"_), permitiendo que la tarea **HU07-T04** defina el tratamiento de dicha incertidumbre y solicite revisión manual.
 - Aportaciones sin datos de autor o con metadatos corruptos/ausentes se clasificarán siempre como **`UNKNOWN`**.
+- Las identidades sintácticamente válidas pero genéricas o compartidas (por ejemplo `unknown@…`, `ghost` o cuentas de servicio locales) también se derivarán a **`UNKNOWN`**, ya que no permiten atribuir la aportación a una persona concreta.
+
+### 6.1. Tratamiento implementado (HU07-T04)
+
+La tarea **HU07-T04** materializa esta interfaz en
+[`src/classifier/unknown-review.js`](../src/classifier/unknown-review.js):
+
+| Regla                | Severidad | Acción de revisión       |
+| -------------------- | --------- | ------------------------ |
+| `invalid-identity`   | Alta      | `verify-commit-identity` |
+| `ambiguous-identity` | Alta      | `verify-author-identity` |
+| `velocity-anomaly`   | Media     | `request-manual-review`  |
+
+Cada aportación desconocida genera una ficha `review` con SHA, autor, fecha,
+líneas añadidas, regla y motivo, y el informe incorpora un bloque `unknownReview`
+con la cola de revisión manual. Mientras la cola no esté vacía, el dictamen global
+permanece en `review_required`.
+
+La especificación completa está en
+[`docs/HU07-T04-aportaciones-desconocidas.md`](./HU07-T04-aportaciones-desconocidas.md).
