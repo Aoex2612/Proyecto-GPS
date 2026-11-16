@@ -7,6 +7,7 @@ const {
   checkTextualPatterns,
   computeVelocityStats,
   hasVelocityAnomaly,
+  isAmbiguousIdentity,
 } = require('../src/classifier/authorship-classifier');
 
 const { parseCommitMetadata } = require('../src/git/metadata-parser');
@@ -194,6 +195,65 @@ describe('HU07-T03 - Clasificación de cada aportación según su origen', () =>
     });
   });
 
+  describe('Identidades ambiguas (HU07-T04)', () => {
+    test('un nombre genérico se clasifica como desconocido', () => {
+      const contribution = createHumanContribution({
+        author: { name: 'Unknown', email: 'alguien@example.com' },
+      });
+
+      expect(isAmbiguousIdentity(contribution.author)).toBe(true);
+      expect(classifyContribution(contribution)).toEqual(
+        expect.objectContaining({ origin: UNKNOWN, rule: 'ambiguous-identity' }),
+      );
+    });
+
+    test('un correo de marcador de posición se clasifica como desconocido', () => {
+      const contribution = createHumanContribution({
+        author: { name: 'Jorge Torres', email: 'unknown@empresa.com' },
+      });
+
+      expect(classifyOrigin(contribution)).toBe(UNKNOWN);
+    });
+
+    test('una cuenta eliminada de GitHub (ghost) se clasifica como desconocida', () => {
+      const contribution = createHumanContribution({
+        author: { name: 'Jorge Torres', email: 'jorge@example.com', login: 'ghost' },
+      });
+
+      expect(classifyOrigin(contribution)).toBe(UNKNOWN);
+    });
+
+    test('un correo de servicio local se clasifica como desconocido', () => {
+      const contribution = createHumanContribution({
+        committer: { name: 'root', email: 'root@localhost' },
+      });
+
+      expect(classifyOrigin(contribution)).toBe(UNKNOWN);
+    });
+
+    test('no marca como ambigua una identidad humana con correo noreply de GitHub', () => {
+      const contribution = createHumanContribution({
+        author: {
+          name: 'Jorge Torres',
+          email: '123456+Joalts8@users.noreply.github.com',
+          login: 'Joalts8',
+        },
+      });
+
+      expect(isAmbiguousIdentity(contribution.author)).toBe(false);
+      expect(classifyOrigin(contribution)).toBe(HUMAN);
+    });
+
+    test('una firma explícita de IA prevalece sobre la identidad ambigua', () => {
+      const contribution = createHumanContribution({
+        author: { name: 'Anonymous', email: 'alguien@example.com' },
+        content: '// Aquí tienes la implementación solicitada',
+      });
+
+      expect(classifyOrigin(contribution)).toBe(AI_ASSISTED);
+    });
+  });
+
   describe('Aportaciones sin datos suficientes (UNKNOWN)', () => {
     test('sin autor se clasifica como desconocida', () => {
       expect(classifyOrigin({})).toBe(UNKNOWN);
@@ -272,7 +332,11 @@ describe('HU07-T03 - Clasificación de cada aportación según su origen', () =>
       return {
         sha,
         author: { login: 'Joalts8', type: 'User' },
-        commit: { author: { ...author, date }, committer: { ...author, date }, message: `feat: ${sha}` },
+        commit: {
+          author: { ...author, date },
+          committer: { ...author, date },
+          message: `feat: ${sha}`,
+        },
         files: [
           { filename: 'package-lock.json', additions: 5000 },
           { filename: 'src/app.js', additions },

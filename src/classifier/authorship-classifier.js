@@ -32,6 +32,21 @@ const CLASSIFICATION_CRITERIA = Object.freeze({
 
   AI_TRAILER_KEYS: Object.freeze([/^ai-assisted$/i, /^generated-by$/i, /^assisted-by$/i]),
 
+  /**
+   * Identidades genéricas o compartidas que, aun siendo sintácticamente válidas,
+   * no permiten atribuir la aportación a una persona concreta (HU07-T04).
+   */
+  AMBIGUOUS_NAME_PATTERNS: Object.freeze([
+    /^(?:unknown|none|null|n\/a|anonymous|anonimo|anónimo|ghost)$/i,
+  ]),
+
+  AMBIGUOUS_LOGIN_PATTERNS: Object.freeze([/^(?:ghost|unknown|anonymous|anonimo|anónimo)$/i]),
+
+  AMBIGUOUS_EMAIL_PATTERNS: Object.freeze([
+    /^(?:unknown|none|null|n\/a|anonymous|anonimo|anónimo|ghost|root)@/i,
+    /@(?:localhost|example\.invalid)$/i,
+  ]),
+
   AI_MESSAGE_PATTERNS: Object.freeze([
     /\[(?:ai-assisted|ai-generated)\]/i,
     /AI-Assisted:\s*(?:true|yes|1)/i,
@@ -107,6 +122,31 @@ function isBotIdentity(identity = {}) {
 }
 
 /**
+ * Indica si una identidad es genérica o compartida y, por tanto, no permite
+ * atribuir la aportación a una persona concreta (HU07-T04).
+ * @param {object} identity
+ * @returns {boolean}
+ */
+function isAmbiguousIdentity(identity = {}) {
+  if (!identity) {
+    return false;
+  }
+
+  const name = String(identity.name || '').trim();
+  const email = String(identity.email || '').trim();
+  const login = String(identity.login || '').trim();
+
+  return (
+    (name.length > 0 &&
+      CLASSIFICATION_CRITERIA.AMBIGUOUS_NAME_PATTERNS.some((pattern) => pattern.test(name))) ||
+    (login.length > 0 &&
+      CLASSIFICATION_CRITERIA.AMBIGUOUS_LOGIN_PATTERNS.some((pattern) => pattern.test(login))) ||
+    (email.length > 0 &&
+      CLASSIFICATION_CRITERIA.AMBIGUOUS_EMAIL_PATTERNS.some((pattern) => pattern.test(email)))
+  );
+}
+
+/**
  * Indica si una identidad corresponde a una herramienta de IA conocida.
  * @param {object} identity
  * @returns {boolean}
@@ -167,7 +207,10 @@ function findMetadataMatch(contribution = {}) {
     typeof message === 'string' &&
     CLASSIFICATION_CRITERIA.AI_MESSAGE_PATTERNS.some((pattern) => pattern.test(message))
   ) {
-    return { rule: 'ai-message-marker', reason: 'Marcador explícito de IA en el mensaje del commit.' };
+    return {
+      rule: 'ai-message-marker',
+      reason: 'Marcador explícito de IA en el mensaje del commit.',
+    };
   }
 
   return null;
@@ -210,10 +253,7 @@ function findTextualMatch(contribution = {}) {
     return { rule: 'ai-text-residue', reason: 'Residuo de bloque Markdown de un chat de LLM.' };
   }
 
-  const commentText = content
-    .split(/\r?\n/)
-    .filter(isCommentLine)
-    .join('\n');
+  const commentText = content.split(/\r?\n/).filter(isCommentLine).join('\n');
 
   if (
     commentText.length > 0 &&
@@ -353,6 +393,15 @@ function classifyContribution(contribution = {}) {
     return { origin: AuthorshipOrigin.AI_ASSISTED, ...textualMatch };
   }
 
+  if (isAmbiguousIdentity(contribution.author) || isAmbiguousIdentity(contribution.committer)) {
+    return {
+      origin: AuthorshipOrigin.UNKNOWN,
+      rule: 'ambiguous-identity',
+      reason:
+        'El autor o el committer usan una identidad genérica o compartida, sin atribución fiable a una persona (T1 §5.1).',
+    };
+  }
+
   if (hasVelocityAnomaly(contribution)) {
     return {
       origin: AuthorshipOrigin.UNKNOWN,
@@ -385,6 +434,7 @@ module.exports = {
   hasValidIdentity,
   isBotIdentity,
   isAiIdentity,
+  isAmbiguousIdentity,
   checkMetadataCriteria,
   checkTextualPatterns,
   hasVelocityAnomaly,

@@ -20,6 +20,8 @@ const {
   classifyContribution,
 } = require('./authorship-classifier');
 
+const { buildUnknownRecord, buildUnknownReview } = require('./unknown-review');
+
 const DEFAULT_AI_THRESHOLD = 50;
 
 /**
@@ -119,8 +121,16 @@ function detectAuthorship(options = {}) {
       date: commit.date || null,
       message: commit.message || '',
       files: commit.files || [],
+      classification: {
+        origin,
+        rule: classification.rule,
+        reason: classification.reason,
+      },
+      review: buildUnknownRecord(commit, classification),
     });
   }
+
+  const unknownReview = buildUnknownReview(contributions);
 
   const total = humanCount + aiAssistedCount + unknownCount;
   const totalLines = humanLines + aiAssistedLines + unknownLines;
@@ -153,7 +163,7 @@ function detectAuthorship(options = {}) {
     );
   }
 
-  const requiresReview = exceedsThreshold || unknownCount > 0;
+  const requiresReview = exceedsThreshold || unknownReview.requiresManualReview;
   const status = requiresReview ? 'review_required' : 'passed';
 
   const normalizedDelivery = {
@@ -182,6 +192,7 @@ function detectAuthorship(options = {}) {
     thresholdAi: threshold,
     identities: collectedIdentities,
     contributions,
+    unknownReview,
   };
 }
 
