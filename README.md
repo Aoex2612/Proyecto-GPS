@@ -83,6 +83,25 @@ está en `sonar-project.properties` y el diseño completo en
 > Si no existe `SONAR_TOKEN`, el análisis queda en estado `skipped` y no bloquea
 > el pipeline.
 
+### 7. Motor de integración continua (HU01-T5)
+
+El job `lifecycle` ejecuta el motor de CI después de `validate` y `quality`.
+Valida que el evento de GitHub dispara el análisis, recorre las fases
+automáticas del contrato (`pull_request`, `analysis` y `reporting`) y genera
+`ci-report.json`, que se publica como artefacto `ci-lifecycle-report` y se
+resume en el job summary:
+
+```bash
+# Reproducción local (sin GitHub Actions)
+$env:GITHUB_REPOSITORY = 'equipo-uma/proyecto-gps'
+$env:GITHUB_EVENT_NAME = 'pull_request'
+node src/pipeline/cli.js
+Get-Content ci-report.json
+```
+
+El diseño completo, el catálogo de tareas y los timeouts están documentados en
+[`docs/HU01-T05-motor-ci.md`](docs/HU01-T05-motor-ci.md).
+
 ---
 
 ## 🌳 Flujo de Trabajo en Git (GitFlow Simplificado)
@@ -123,14 +142,14 @@ Una tarea solo se considera **terminada** si cumple:
 
 ```text
 ├── .github/
-│   ├── workflows/ci.yml           # Pipeline de validación automática
+│   ├── workflows/ci.yml           # Pipeline: validate, quality y lifecycle
 │   └── pull_request_template.md   # Plantilla de PR con checklist del DoD
 ├── src/
 │   ├── index.js                   # Entrypoint de la GitHub Action
 │   ├── auth/                      # HU08: Cliente de GitHub y llamadas seguras (Octokit)
 │   ├── classifier/                # HU07: Clasificador de autoría (Humano / IA / Desconocido)
 │   ├── git/                       # HU01 / HU07: Extracción de metadatos de Git y commits
-│   ├── pipeline/                  # HU01: Contrato de fases del ciclo de entrega
+│   ├── pipeline/                  # HU01: Fases, procesos y motor de integración continua
 │   ├── quality/                   # HU01-T4: Cliente SonarCloud, umbrales y reporte
 │   ├── reporter/                  # HU08: Notificación en PRs y manejo de errores
 │   └── utils/                     # Utilidades comunes y logging
