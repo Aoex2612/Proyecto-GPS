@@ -4,9 +4,10 @@
 
 const classifier = require('./authorship-classifier');
 const detector = require('./authorship-detector');
+const unknownReview = require('./unknown-review');
 
 module.exports = {
   ...classifier,
   ...detector,
+  ...unknownReview,
 };
-

@@ -179,6 +179,103 @@ describe('HU01-T03 - Sistema de detección de procedencia del código con metada
     });
   });
 
+  describe('Tratamiento de aportaciones desconocidas (HU07-T04)', () => {
+    test('no deja ninguna aportación en la cola cuando todo es identificable', () => {
+      const result = detectAuthorship({ commits: [createRawGithubCommit({ sha: 'c1' })] });
+
+      expect(result.unknownReview).toEqual(
+        expect.objectContaining({
+          total: 0,
+          requiresManualReview: false,
+          items: [],
+        }),
+      );
+      expect(result.contributions[0].review).toBeNull();
+    });
+
+    test('registra en unknownReview las identidades no identificables', () => {
+      const rawCommits = [
+        createRawGithubCommit({
+          sha: 'c1',
+          author: { name: 'Unknown', email: 'unknown@example.com', date: '2026-11-14T10:00:00Z' },
+        }),
+      ];
+
+      const result = detectAuthorship({ commits: rawCommits });
+
+      expect(result.authorship.unknown).toBe(1);
+      expect(result.unknownReview.total).toBe(1);
+      expect(result.unknownReview.requiresManualReview).toBe(true);
+      expect(result.unknownReview.byRule).toEqual({ 'ambiguous-identity': 1 });
+      expect(result.unknownReview.bySeverity).toEqual({ high: 1, medium: 0, low: 0 });
+      expect(result.unknownReview.items[0]).toEqual(
+        expect.objectContaining({
+          sha: 'c1',
+          rule: 'ambiguous-identity',
+          action: 'verify-author-identity',
+          requiresManualReview: true,
+        }),
+      );
+    });
+
+    test('adjunta la ficha de revisión solo a las aportaciones desconocidas', () => {
+      const rawCommits = [
+        createRawGithubCommit({ sha: 'humano' }),
+        createRawGithubCommit({
+          sha: 'dudoso',
+          author: { name: 'Jorge', email: 'invalido', date: '2026-11-14T10:00:00Z' },
+        }),
+      ];
+
+      const result = detectAuthorship({ commits: rawCommits });
+
+      expect(result.contributions[0].review).toBeNull();
+      expect(result.contributions[1].review).toEqual(
+        expect.objectContaining({
+          sha: 'dudoso',
+          rule: 'invalid-identity',
+          severity: 'high',
+          action: 'verify-commit-identity',
+        }),
+      );
+    });
+
+    test('una anomalía de velocidad se marca con severidad media y revisión manual', () => {
+      const rawCommits = [
+        createRawGithubCommit({ sha: 'c1', date: '2026-11-14T10:00:00Z' }),
+        createRawGithubCommit({
+          sha: 'c2',
+          date: '2026-11-14T10:00:30Z',
+          files: [{ filename: 'src/massive.js', additions: 1500, patch: '+massive' }],
+        }),
+      ];
+
+      const result = detectAuthorship({ commits: rawCommits });
+
+      expect(result.unknownReview.items[0]).toEqual(
+        expect.objectContaining({
+          rule: 'velocity-anomaly',
+          severity: 'medium',
+          action: 'request-manual-review',
+        }),
+      );
+    });
+
+    test('el dictamen exige revisión cuando la cola de desconocidas no está vacía', () => {
+      const result = detectAuthorship({
+        commits: [
+          createRawGithubCommit({
+            sha: 'c1',
+            author: { name: 'Anonymous', email: 'anon@example.com', date: '2026-11-14T10:00:00Z' },
+          }),
+        ],
+      });
+
+      expect(result.unknownReview.requiresManualReview).toBe(true);
+      expect(result.verdict.status).toBe('review_required');
+    });
+  });
+
   describe('Evaluación de umbrales y dictamen global (verdict)', () => {
     test('dictamina passed cuando el porcentaje de IA está por debajo o igual al umbral', () => {
       const rawCommits = [
