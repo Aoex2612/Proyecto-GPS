@@ -143,6 +143,10 @@ Una tarea solo se considera **terminada** si cumple:
 └── .prettierrc                    # Configuración de formateo
 ```
 
+### Reintentos de operaciones (HU08-T4)
+
+`withRetry(operation, options)` en `src/utils/retry.js` ofrece una política común para operaciones asíncronas: hasta 3 intentos por defecto, con espera exponencial (1 s, 2 s) y respeto de las cabeceras `Retry-After` y `X-RateLimit-Reset` de GitHub. Solo reintenta fallos transitorios de red, HTTP 408/429/5xx y respuestas 403 identificadas como límite de peticiones; los demás errores se propagan sin reintento. Los parámetros `maxAttempts`, `baseDelayMs`, `maxDelayMs`, `sleep`, `shouldRetry` y `logger` se pueden configurar. Debe usarse especialmente con operaciones idempotentes, ya que el resultado de una petición de escritura que perdió la respuesta puede ser ambiguo.
+
 ### Metadatos e identidades (HU07-T02)
 
 `parseCommitMetadata({ commits })` normaliza los commits recibidos de GitHub y devuelve:
