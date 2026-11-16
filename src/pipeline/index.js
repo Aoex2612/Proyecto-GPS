@@ -8,9 +8,11 @@
 const phases = require('./phases');
 const uploadProcesses = require('./upload-processes');
 const ciEngine = require('./ci-engine');
+const authorshipHandler = require('./authorship-handler');
 
 module.exports = {
   ...phases,
   ...uploadProcesses,
   ...ciEngine,
+  ...authorshipHandler,
 };

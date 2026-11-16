@@ -146,6 +146,9 @@ jobs:
           CI_TIMEOUT_MS: '600000'
           CI_TASK_TIMEOUT_MS: '120000'
           CI_ENGINE_FAIL_ON_ERROR: 'true'
+          CI_ANALYZE_AUTHORSHIP: 'true'
+          CI_AI_THRESHOLD: '50'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node src/pipeline/cli.js
 
       - name: Upload lifecycle report

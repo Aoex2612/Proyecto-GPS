@@ -1,4 +1,5 @@
 const {
+  buildDefaultHandlers,
   buildSummaryMarkdown,
   loadEventPayload,
   parseBoolean,
@@ -24,6 +25,38 @@ function buildPullRequestPayload(overrides = {}) {
       head: { ref: 'HU01-T05-motor-integracion-continua', sha: 'abc1234' },
     },
     ...overrides,
+  };
+}
+
+/**
+ * Cliente de GitHub simulado para el handler de autoría.
+ * @returns {object}
+ */
+function createFakeClient() {
+  return {
+    rest: {
+      pulls: {
+        listCommits: jest.fn().mockResolvedValue({
+          data: [
+            {
+              sha: 'sha-1',
+              commit: {
+                message: 'feat: cambio humano',
+                author: { name: 'Ana', email: 'ana@example.com', date: '2026-11-16T10:00:00Z' },
+                committer: {
+                  name: 'Ana',
+                  email: 'ana@example.com',
+                  date: '2026-11-16T10:00:00Z',
+                },
+              },
+              author: { name: 'Ana', email: 'ana@example.com', login: 'ana', type: 'User' },
+              committer: { name: 'Ana', email: 'ana@example.com', login: 'ana', type: 'User' },
+            },
+          ],
+        }),
+      },
+      repos: { listCommits: jest.fn().mockResolvedValue({ data: [] }) },
+    },
   };
 }
 
@@ -220,6 +253,69 @@ describe('HU01-T5 - CLI del motor de integración continua', () => {
       expect(appended[0].filePath).toBe('summary.md');
       expect(appended[0].content).toContain('Motor de integración continua (HU01-T5)');
       expect(appended[0].content).toContain('pull_request.opened');
+    });
+  });
+
+  describe('handlers por defecto', () => {
+    test('no registra autoría si CI_ANALYZE_AUTHORSHIP no está activo', () => {
+      const handlers = buildDefaultHandlers({ env: {} });
+
+      expect(handlers[LifecycleTask.ANALYZE_AUTHORSHIP]).toBeUndefined();
+      expect(handlers[LifecycleTask.VERIFY_TRIGGER]).toEqual(expect.any(Function));
+    });
+
+    test('avisa si se activa la autoría sin token', async () => {
+      const handlers = buildDefaultHandlers({ env: { CI_ANALYZE_AUTHORSHIP: 'true' } });
+
+      await expect(handlers[LifecycleTask.ANALYZE_AUTHORSHIP]({ delivery: {} })).rejects.toThrow(
+        'GITHUB_TOKEN',
+      );
+    });
+
+    test('analiza la autoría con el cliente inyectado', async () => {
+      const client = createFakeClient();
+      const result = await runCli({
+        env: {
+          GITHUB_EVENT_NAME: 'pull_request',
+          GITHUB_EVENT_PATH: 'evento.json',
+          GITHUB_REPOSITORY: 'equipo-uma/proyecto-gps',
+          GITHUB_TOKEN: 'token',
+          CI_ANALYZE_AUTHORSHIP: 'true',
+          CI_AI_THRESHOLD: '50',
+        },
+        readFileImpl: async () => JSON.stringify(buildPullRequestPayload()),
+        createClient: () => client,
+        writeFileImpl: async () => {},
+        appendFileImpl: async () => {},
+      });
+
+      expect(client.rest.pulls.listCommits).toHaveBeenCalledTimes(1);
+      expect(result.report.authorship.authorship).toEqual(
+        expect.objectContaining({ human: 1, aiAssisted: 0, unknown: 0, total: 1 }),
+      );
+      expect(result.report.summary.status).toBe('passed');
+      expect(result.summaryMarkdown).toContain('Autoría:');
+    });
+
+    test('degrada la autoría a aviso cuando falta el token', async () => {
+      const result = await runCli({
+        env: {
+          GITHUB_EVENT_NAME: 'pull_request',
+          GITHUB_REPOSITORY: 'equipo-uma/proyecto-gps',
+          GITHUB_SHA: 'abc1234',
+          CI_ANALYZE_AUTHORSHIP: 'true',
+        },
+        writeFileImpl: async () => {},
+        appendFileImpl: async () => {},
+      });
+      const task = result.report.phases
+        .flatMap((phase) => phase.tasks)
+        .find((item) => item.id === LifecycleTask.ANALYZE_AUTHORSHIP);
+
+      expect(task.status).toBe('warning');
+      expect(task.error.message).toContain('GITHUB_TOKEN');
+      expect(result.report.summary.status).toBe('warning');
+      expect(result.exitCode).toBe(0);
     });
   });
 

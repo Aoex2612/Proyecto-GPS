@@ -1,17 +1,18 @@
 # HU01-T5 — Motor de integración continua
 
-| Campo                        | Valor                                                                                                                                    |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Historia de Usuario          | HU01 — Automatización del análisis del código                                                                                            |
-| Tarea                        | HU01-T5                                                                                                                                  |
-| Responsable                  | Jesús Cañete García (JG)                                                                                                                 |
-| Revisor asignado (matriz P4) | Ángel López Sánchez (AS)                                                                                                                 |
-| Dependencias                 | HU01-T1, HU01-T2, HU01-T3, HU01-T4, HU08-T3                                                                                              |
-| Contrato implementado        | [`src/pipeline/ci-engine.js`](../src/pipeline/ci-engine.js)                                                                              |
-| Punto de entrada CI          | [`src/pipeline/cli.js`](../src/pipeline/cli.js)                                                                                          |
-| Fachada del pipeline         | [`src/pipeline/index.js`](../src/pipeline/index.js)                                                                                      |
-| Pruebas                      | [`tests/pipeline/ci-engine.test.js`](../tests/pipeline/ci-engine.test.js), [`tests/pipeline/cli.test.js`](../tests/pipeline/cli.test.js) |
-| Workflow                     | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)                                                                                |
+| Campo                        | Valor                                                                                                                                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Historia de Usuario          | HU01 — Automatización del análisis del código                                                                                                                                                                                         |
+| Tarea                        | HU01-T5                                                                                                                                                                                                                               |
+| Responsable                  | Jesús Cañete García (JG)                                                                                                                                                                                                              |
+| Revisor asignado (matriz P4) | Ángel López Sánchez (AS)                                                                                                                                                                                                              |
+| Dependencias                 | HU01-T1, HU01-T2, HU01-T3, HU01-T4, HU08-T3                                                                                                                                                                                           |
+| Contrato implementado        | [`src/pipeline/ci-engine.js`](../src/pipeline/ci-engine.js)                                                                                                                                                                           |
+| Handler de autoría           | [`src/pipeline/authorship-handler.js`](../src/pipeline/authorship-handler.js)                                                                                                                                                         |
+| Punto de entrada CI          | [`src/pipeline/cli.js`](../src/pipeline/cli.js)                                                                                                                                                                                       |
+| Fachada del pipeline         | [`src/pipeline/index.js`](../src/pipeline/index.js)                                                                                                                                                                                   |
+| Pruebas                      | [`tests/pipeline/ci-engine.test.js`](../tests/pipeline/ci-engine.test.js), [`tests/pipeline/authorship-handler.test.js`](../tests/pipeline/authorship-handler.test.js), [`tests/pipeline/cli.test.js`](../tests/pipeline/cli.test.js) |
+| Workflow                     | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)                                                                                                                                                                             |
 
 ## 1. Objetivo
 
@@ -27,7 +28,9 @@ El diseño separa dos responsabilidades:
    handlers, aplica timeouts y agrega el resultado.
 2. **Adaptadores** (`handlers` inyectados): conectan los subsistemas de autoría
    (HU01-T3), calidad (HU01-T4) y publicación (HU08-T3) con el orquestador. El
-   motor no realiza llamadas de red por sí mismo.
+   motor no realiza llamadas de red por sí mismo: el CLI registra el handler de
+   autoría (`authorship-handler.js`) cuando `CI_ANALYZE_AUTHORSHIP` está activo
+   y existe `GITHUB_TOKEN`.
 
 ## 2. Alcance
 
@@ -42,6 +45,8 @@ El diseño separa dos responsabilidades:
   se intenta siempre.
 - Presupuesto global de tiempo, timeout por tarea y cancelación por señal.
 - Informe serializable con delivery, fases, tareas, autoría, calidad y resumen.
+- Handler de autoría que descarga los commits de la PR o del push y ejecuta
+  `detectAuthorship` (HU01-T3).
 - CLI para GitHub Actions que escribe el informe y el job summary.
 - Job `lifecycle` en el workflow y artefacto `ci-lifecycle-report`.
 
@@ -70,7 +75,7 @@ buildLifecyclePlan()
 runLifecycle()
    │
    ├── pull_request  ─ verify-trigger → assemble-delivery
-   ├── analysis      ─ analyze-authorship → analyze-quality
+   ├── analysis      ─ analyze-authorship (API GitHub + HU01-T3) → analyze-quality
    └── reporting     ─ publish-report → publish-status
    │
    ▼
@@ -83,14 +88,14 @@ consumir el resultado de la anterior sin acoplar los módulos entre sí.
 
 ## 4. Catálogo de tareas
 
-| #   | Tarea (`id`)         | Fase           | Bloqueante | Timeout | Responsabilidad                               |
-| --- | -------------------- | -------------- | ---------- | ------- | --------------------------------------------- |
-| 1   | `verify-trigger`     | `pull_request` | Sí         | 30 s    | Validar evento y coherencia del contrato.     |
-| 2   | `assemble-delivery`  | `pull_request` | Sí         | 30 s    | Consolidar `delivery` (repo, PR, ramas, SHA). |
-| 3   | `analyze-authorship` | `analysis`     | No         | 120 s   | Ejecutar HU01-T3 y adjuntar `authorship`.     |
-| 4   | `analyze-quality`    | `analysis`     | Sí         | 120 s   | Ejecutar HU01-T4 y aplicar el Quality Gate.   |
-| 5   | `publish-report`     | `reporting`    | No         | 60 s    | Publicar el comentario de resultados.         |
-| 6   | `publish-status`     | `reporting`    | No         | 60 s    | Actualizar el Status Check de la entrega.     |
+| #   | Tarea (`id`)         | Fase           | Bloqueante | Timeout | Responsabilidad                                       |
+| --- | -------------------- | -------------- | ---------- | ------- | ----------------------------------------------------- |
+| 1   | `verify-trigger`     | `pull_request` | Sí         | 30 s    | Validar evento y coherencia del contrato.             |
+| 2   | `assemble-delivery`  | `pull_request` | Sí         | 30 s    | Consolidar `delivery` (repo, PR, ramas, SHA).         |
+| 3   | `analyze-authorship` | `analysis`     | No         | 120 s   | Descargar commits (T3) y ejecutar `detectAuthorship`. |
+| 4   | `analyze-quality`    | `analysis`     | Sí         | 120 s   | Ejecutar HU01-T4 y aplicar el Quality Gate.           |
+| 5   | `publish-report`     | `reporting`    | No         | 60 s    | Publicar el comentario de resultados.                 |
+| 6   | `publish-status`     | `reporting`    | No         | 60 s    | Actualizar el Status Check de la entrega.             |
 
 Reglas del catálogo:
 
@@ -199,7 +204,17 @@ HU01-T1:
     "aborted": false
   },
   "phases": [],
-  "authorship": null,
+  "authorship": {
+    "authorship": {
+      "human": 3,
+      "aiAssisted": 0,
+      "unknown": 0,
+      "total": 3,
+      "percentage": { "human": 100, "aiAssisted": 0, "unknown": 0 }
+    },
+    "verdict": { "status": "passed", "exceedsThreshold": false, "reasons": [] },
+    "thresholdAi": 50
+  },
   "quality": {
     "status": "skipped",
     "issues": [],
@@ -207,7 +222,7 @@ HU01-T1:
   },
   "summary": {
     "status": "passed",
-    "tasks": { "total": 6, "passed": 2, "warning": 0, "failed": 0, "skipped": 4 },
+    "tasks": { "total": 6, "passed": 3, "warning": 0, "failed": 0, "skipped": 3 },
     "phases": { "total": 7, "automated": 3, "executed": 3, "failed": 0, "skipped": 4 },
     "durationMs": 842
   }
@@ -223,11 +238,11 @@ completo se publica como `ci-report.json`.
 El workflow `.github/workflows/ci.yml` mantiene los jobs existentes y añade el
 gate del ciclo de vida:
 
-| Job         | Fase del contrato | Qué ejecuta                                              |
-| ----------- | ----------------- | -------------------------------------------------------- |
-| `validate`  | `analysis`        | `npm ci`, ESLint y tests unitarios.                      |
-| `quality`   | `analysis`        | Tests con cobertura, SonarCloud y `quality-report.json`. |
-| `lifecycle` | `reporting`       | Motor de CI, validación de triggers y `ci-report.json`.  |
+| Job         | Fase del contrato | Qué ejecuta                                                  |
+| ----------- | ----------------- | ------------------------------------------------------------ |
+| `validate`  | `analysis`        | `npm ci`, ESLint y tests unitarios.                          |
+| `quality`   | `analysis`        | Tests con cobertura, SonarCloud y `quality-report.json`.     |
+| `lifecycle` | `reporting`       | Motor de CI, autoría (HU01-T3), triggers y `ci-report.json`. |
 
 Características del workflow:
 
@@ -235,23 +250,27 @@ Características del workflow:
 - `timeout-minutes: 10` en los tres jobs.
 - El gate `lifecycle` se ejecuta después de `validate` y `quality`, y sigue
   funcionando aunque `quality` se omita en PRs de fork.
+- `CI_ANALYZE_AUTHORSHIP=true` activa la descarga de commits con
+  `GITHUB_TOKEN` y la ejecución de `detectAuthorship`.
 - El informe se publica como artefacto `ci-lifecycle-report`.
-- El resumen se añade al **job summary** mediante `GITHUB_STEP_SUMMARY`.
+- El resumen se añade al **job summary** mediante `GITHUB_STEP_SUMMARY`,
+  incluyendo el recuento de aportaciones humanas, asistidas y desconocidas.
 - Permisos mínimos: `contents: read`, `pull-requests: write`, `checks: write`.
 
 ## 9. Integración con el resto de tareas
 
-| Tarea   | Relación con el motor                                                     |
-| ------- | ------------------------------------------------------------------------- |
-| HU01-T1 | Aporta `DELIVERY_PHASES`, `TRIGGER_EVENTS` e `isValidTransition`.         |
-| HU01-T2 | Aporta `UPLOAD_PROCESSES` y `validateAgainstTriggerEvents`.               |
-| HU01-T3 | Se conecta como handler de `analyze-authorship` y devuelve `authorship`.  |
-| HU01-T4 | Se conecta como handler de `analyze-quality` y devuelve `quality`.        |
-| HU01-T6 | Consume el informe para generar el resumen Markdown de la entrega.        |
-| HU08-T3 | Se conecta como handler de `publish-report` mediante `notifyPullRequest`. |
-| HU08-T5 | Aporta los reintentos y el control de cuota de las publicaciones.         |
+| Tarea   | Relación con el motor                                                            |
+| ------- | -------------------------------------------------------------------------------- |
+| HU01-T1 | Aporta `DELIVERY_PHASES`, `TRIGGER_EVENTS` e `isValidTransition`.                |
+| HU01-T2 | Aporta `UPLOAD_PROCESSES` y `validateAgainstTriggerEvents`.                      |
+| HU01-T3 | Se conecta mediante `src/pipeline/authorship-handler.js`; devuelve `authorship`. |
+| HU01-T4 | Se conecta como handler de `analyze-quality` y devuelve `quality`.               |
+| HU01-T6 | Consume el informe para generar el resumen Markdown de la entrega.               |
+| HU08-T3 | Se conecta como handler de `publish-report` mediante `notifyPullRequest`.        |
+| HU08-T5 | Aporta los reintentos y el control de cuota de las publicaciones.                |
 
-Ejemplo de conexión de handlers:
+Ejemplo de conexión de handlers (el CLI ya registra automáticamente el de
+autoría cuando `CI_ANALYZE_AUTHORSHIP=true`):
 
 ```js
 const { LifecycleTask, createContractHandlers, runLifecycle } = require('./src/pipeline');
@@ -272,10 +291,11 @@ const report = await runLifecycle({
 
 ## 10. Seguridad
 
-- El motor no ejecuta comandos con contenido de la PR ni llama a la API por sí
-  mismo: solo invoca handlers registrados explícitamente.
+- El motor no ejecuta comandos con contenido de la PR. El handler de autoría
+  solo realiza llamadas de lectura (`pulls.listCommits` o `repos.listCommits`).
 - Los tokens se reciben en el entorno o en los inputs de la Action y nunca se
-  incluyen en el informe.
+  incluyen en el informe. `GITHUB_TOKEN` se usa únicamente para autenticar el
+  cliente de Octokit.
 - Los mensajes de error se limitan a `message` y `code`; no se serializan stacks
   ni cabeceras de autenticación.
 - Los permisos del job `lifecycle` se acotan a lectura de contenido y escritura
@@ -284,21 +304,22 @@ const report = await runLifecycle({
 
 ## 11. Criterios de aceptación de HU01 cubiertos
 
-| Criterio de HU01                                                                | Cómo lo cubre T5                                                                     |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| El análisis se inicia automáticamente al registrar una entrega o actualización. | `resolveTrigger()` valida los eventos de `TRIGGER_EVENTS` y el workflow los dispara. |
-| La herramienta evalúa cambios y metadatos sin intervención manual.              | El motor ejecuta `analyze-authorship` y `analyze-quality` con handlers inyectados.   |
-| La ejecución finaliza dentro de límites de tiempo aceptables.                   | Presupuesto global de 10 min, timeout por tarea y `timeout-minutes` en el job.       |
-| El sistema notifica el estado del análisis.                                     | Fase `reporting`, job summary, artefacto y Status Check del workflow.                |
+| Criterio de HU01                                                                | Cómo lo cubre T5                                                                                    |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| El análisis se inicia automáticamente al registrar una entrega o actualización. | `resolveTrigger()` valida los eventos de `TRIGGER_EVENTS` y el workflow los dispara.                |
+| La herramienta evalúa cambios y metadatos sin intervención manual.              | El job `lifecycle` descarga los commits y ejecuta `detectAuthorship`; `quality` ejecuta SonarCloud. |
+| La ejecución finaliza dentro de límites de tiempo aceptables.                   | Presupuesto global de 10 min, timeout por tarea y `timeout-minutes` en el job.                      |
+| El sistema notifica el estado del análisis.                                     | Fase `reporting`, job summary, artefacto y Status Check del workflow.                               |
 
 ## 12. TDD y evidencias
 
 Se escribieron primero las pruebas y después la implementación:
 
-| Suite               | Qué cubre                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------ |
-| `ci-engine.test.js` | Catálogo inmutable, plan, triggers, orden, fallos, timeouts, cancelación y handlers. |
-| `cli.test.js`       | Contexto de GitHub, parseo, escritura del informe, códigos de salida y job summary.  |
+| Suite                        | Qué cubre                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------ |
+| `ci-engine.test.js`          | Catálogo inmutable, plan, triggers, orden, fallos, timeouts, cancelación y handlers. |
+| `authorship-handler.test.js` | Paginación de commits, rutas PR/push, errores de API y entrega del informe.          |
+| `cli.test.js`                | Contexto de GitHub, parseo, escritura del informe, códigos de salida y job summary.  |
 
 Comandos de verificación:
 
@@ -336,8 +357,9 @@ Get-Content ci-report.json
 
 Variables admitidas: `GITHUB_EVENT_NAME`, `GITHUB_EVENT_PATH`,
 `GITHUB_REPOSITORY`, `GITHUB_REF_NAME`, `GITHUB_HEAD_REF`, `GITHUB_BASE_REF`,
-`GITHUB_SHA`, `CI_REPORT_PATH`, `CI_TIMEOUT_MS`, `CI_TASK_TIMEOUT_MS` y
-`CI_ENGINE_FAIL_ON_ERROR`.
+`GITHUB_SHA`, `CI_REPORT_PATH`, `CI_TIMEOUT_MS`, `CI_TASK_TIMEOUT_MS`,
+`CI_ENGINE_FAIL_ON_ERROR`, `CI_ANALYZE_AUTHORSHIP`, `CI_AI_THRESHOLD` y
+`GITHUB_TOKEN` (necesario para descargar commits cuando la autoría está activa).
 
 ## 14. Modos de fallo
 
@@ -351,18 +373,21 @@ Variables admitidas: `GITHUB_EVENT_NAME`, `GITHUB_EVENT_PATH`,
 | Timeout por tarea                         | Tarea `warning`/`failed` con `code: TASK_TIMEOUT`.                |
 | Presupuesto global agotado                | `timedOut: true`, tareas restantes omitidas y resumen `failed`.   |
 | Handler ausente                           | Tarea `skipped` con motivo; no rompe el pipeline.                 |
+| Autoría activa sin `GITHUB_TOKEN`         | Tarea `warning` con el motivo; el pipeline continúa.              |
+| Fallo de la API al listar commits         | Tarea `warning`; el informe conserva el error y sigue el resto.   |
 | Señal de cancelación ya abortada          | Sin handlers, `aborted: true`, resumen `skipped`.                 |
 
 ## 15. Riesgos y mitigaciones
 
-| Riesgo                                                | Mitigación                                                                   |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Un handler lento consume el presupuesto del job.      | Timeout por tarea y timeout efectivo acotado por el presupuesto global.      |
-| Un fallo de análisis deja la PR sin notificación.     | `reporting` se ejecuta aunque `analysis` falle.                              |
-| PRs de fork sin secretos.                             | El job `quality` se omite y el gate `lifecycle` sigue evaluando.             |
-| Ejecuciones antiguas pisan el resultado de la última. | `concurrency` por PR/rama con `cancel-in-progress`.                          |
-| El contrato de T1 cambia y rompe a T5.                | Plan inválido con motivo explícito y tests de coherencia con T2.             |
-| Se publican informes duplicados en la PR.             | El handler de HU08-T3 reutiliza el marcador `<!-- ai-authorship-report -->`. |
+| Riesgo                                                | Mitigación                                                                                  |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Un handler lento consume el presupuesto del job.      | Timeout por tarea y timeout efectivo acotado por el presupuesto global.                     |
+| Un fallo de análisis deja la PR sin notificación.     | `reporting` se ejecuta aunque `analysis` falle.                                             |
+| PRs de fork sin secretos.                             | El job `quality` se omite; `GITHUB_TOKEN` sigue disponible en solo lectura para la autoría. |
+| PRs con más de 500 commits.                           | La paginación se acota a 5 páginas (500 commits) para proteger la cuota.                    |
+| Ejecuciones antiguas pisan el resultado de la última. | `concurrency` por PR/rama con `cancel-in-progress`.                                         |
+| El contrato de T1 cambia y rompe a T5.                | Plan inválido con motivo explícito y tests de coherencia con T2.                            |
+| Se publican informes duplicados en la PR.             | El handler de HU08-T3 reutiliza el marcador `<!-- ai-authorship-report -->`.                |
 
 ## 16. Estimación (ClickUp)
 

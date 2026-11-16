@@ -87,9 +87,10 @@ está en `sonar-project.properties` y el diseño completo en
 
 El job `lifecycle` ejecuta el motor de CI después de `validate` y `quality`.
 Valida que el evento de GitHub dispara el análisis, recorre las fases
-automáticas del contrato (`pull_request`, `analysis` y `reporting`) y genera
-`ci-report.json`, que se publica como artefacto `ci-lifecycle-report` y se
-resume en el job summary:
+automáticas del contrato (`pull_request`, `analysis` y `reporting`), descarga
+los commits de la entrega y ejecuta el detector de autoría de HU01-T3. Después
+genera `ci-report.json`, que se publica como artefacto `ci-lifecycle-report` y
+se resume en el job summary:
 
 ```bash
 # Reproducción local (sin GitHub Actions)

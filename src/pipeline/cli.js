@@ -20,7 +20,14 @@
 
 const fs = require('fs/promises');
 const path = require('path');
-const { buildLifecyclePlan, createContractHandlers, runLifecycle } = require('./ci-engine');
+const { createGitHubClient } = require('../auth/github-client');
+const { createAuthorshipHandler } = require('./authorship-handler');
+const {
+  LifecycleTask,
+  buildLifecyclePlan,
+  createContractHandlers,
+  runLifecycle,
+} = require('./ci-engine');
 
 /**
  * Convierte un valor de entorno en número.
@@ -138,7 +145,7 @@ function resolveDeliveryContext(env = {}, payload = null) {
 }
 
 /**
- * Construye un resumen en Markdown para el job summary de GitHub Actions.
+ * Construye el resumen en Markdown para el job summary de GitHub Actions.
  * @param {object} report
  * @returns {string}
  */
@@ -147,13 +154,14 @@ function buildSummaryMarkdown(report = {}) {
   const summary = report.summary || {};
   const tasks = summary.tasks || {};
   const event = lifecycle.event || {};
+  const authorship = report.authorship?.authorship;
 
   const rows = (report.phases || [])
     .filter((phase) => phase.automated || phase.status !== 'skipped')
     .map((phase) => `| \`${phase.id}\` | ${phase.status} | ${phase.tasks.length} |`)
     .join('\n');
 
-  return [
+  const lines = [
     '## Motor de integración continua (HU01-T5)',
     '',
     `- Evento: \`${event.name || 'desconocido'}.${event.action || '-'}\` → \`${
@@ -165,12 +173,62 @@ function buildSummaryMarkdown(report = {}) {
     } fallidas, ${tasks.skipped || 0} omitidas`,
     `- Duración: ${summary.durationMs ?? lifecycle.durationMs ?? 0} ms`,
     `- Grupo de concurrencia: \`${lifecycle.concurrencyGroup || '-'}\``,
+  ];
+
+  if (authorship && authorship.total > 0) {
+    lines.push(
+      `- Autoría: ${authorship.human} humanas, ${authorship.aiAssisted} asistidas por IA (` +
+        `${authorship.percentage?.aiAssisted ?? 0}%), ${authorship.unknown} desconocidas → ` +
+        `${report.authorship?.verdict?.status || 'sin veredicto'}`,
+    );
+  }
+
+  lines.push(
     '',
     '| Fase | Estado | Tareas |',
     '| ---- | ------ | ------ |',
     rows || '| - | - | - |',
     '',
-  ].join('\n');
+  );
+
+  return lines.join('\n');
+}
+
+/**
+ * Compone los handlers del motor: contrato + los inyectados por el llamador y,
+ * opcionalmente, el análisis de autoría de HU01-T3 mediante la API de GitHub.
+ *
+ * @param {object} [options]
+ * @param {object} [options.env]
+ * @param {object} [options.handlers]
+ * @param {Function} [options.createClient] - Fábrica de cliente inyectable.
+ * @returns {object}
+ */
+function buildDefaultHandlers({ env = {}, handlers = {}, createClient = createGitHubClient } = {}) {
+  const merged = { ...createContractHandlers(), ...handlers };
+
+  if (merged[LifecycleTask.ANALYZE_AUTHORSHIP]) {
+    return merged;
+  }
+
+  if (!parseBoolean(env.CI_ANALYZE_AUTHORSHIP, false)) {
+    return merged;
+  }
+
+  if (!env.GITHUB_TOKEN) {
+    merged[LifecycleTask.ANALYZE_AUTHORSHIP] = async () => {
+      throw new Error('CI_ANALYZE_AUTHORSHIP está activo pero GITHUB_TOKEN no está configurado.');
+    };
+    return merged;
+  }
+
+  const client = createClient(env.GITHUB_TOKEN);
+  merged[LifecycleTask.ANALYZE_AUTHORSHIP] = createAuthorshipHandler({
+    client,
+    thresholdAi: parseNumber(env.CI_AI_THRESHOLD, 50),
+  });
+
+  return merged;
 }
 
 /**
@@ -182,6 +240,7 @@ function buildSummaryMarkdown(report = {}) {
  * @param {Function} [options.readFileImpl]
  * @param {Function} [options.writeFileImpl]
  * @param {Function} [options.appendFileImpl]
+ * @param {Function} [options.createClient]
  * @param {Function} [options.now]
  * @returns {Promise<{report: object, plan: object, reportPath: string, exitCode: number, summaryMarkdown: string}>}
  */
@@ -192,6 +251,7 @@ async function runCli({
   readFileImpl = fs.readFile,
   writeFileImpl = fs.writeFile,
   appendFileImpl = fs.appendFile,
+  createClient,
   now,
 } = {}) {
   const payload = await loadEventPayload(env, readFileImpl);
@@ -207,7 +267,11 @@ async function runCli({
   const report = await runLifecycle({
     ...context,
     plan,
-    handlers: { ...createContractHandlers(), ...handlers },
+    handlers: buildDefaultHandlers({
+      env,
+      handlers,
+      createClient: createClient || createGitHubClient,
+    }),
     timeoutMs: parseNumber(env.CI_TIMEOUT_MS, undefined),
     taskTimeoutMs: parseNumber(env.CI_TASK_TIMEOUT_MS, undefined),
     now,
@@ -257,6 +321,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  buildDefaultHandlers,
   buildSummaryMarkdown,
   loadEventPayload,
   parseBoolean,
