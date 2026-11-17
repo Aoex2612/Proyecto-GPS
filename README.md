@@ -131,6 +131,7 @@ Una tarea solo se considera **terminada** si cumple:
 │   ├── classifier/                # HU07: Clasificador de autoría (Humano / IA / Desconocido)
 │   ├── git/                       # HU01 / HU07: Extracción de metadatos de Git y commits
 │   ├── pipeline/                  # HU01: Contrato de fases del ciclo de entrega
+│   ├── persistence/               # HU07-T5: Guardado y lectura de la clasificación (metrics.json)
 │   ├── quality/                   # HU01-T4: Cliente SonarCloud, umbrales y reporte
 │   ├── reporter/                  # HU08: Notificación en PRs y manejo de errores
 │   └── utils/                     # Utilidades comunes y logging
@@ -155,3 +156,15 @@ Una tarea solo se considera **terminada** si cumple:
 - Una lista consolidada de identidades de autor, committer y coautores. Se consideran duplicadas las identidades que comparten correo o login; si no hay ninguno, se comparan por nombre.
 
 Git proporciona nombre y correo en los metadatos del commit, mientras que la API de GitHub puede añadir login y tipo de cuenta (`User` o `Bot`). Los parches se concatenan desde `files[].patch`; GitHub puede omitirlos en ficheros grandes o cuando el parche no está disponible, por lo que un diff vacío no significa que el commit no tenga cambios. Los trailers se conservan por clave y valor para que el clasificador pueda evaluar otras declaraciones además de los coautores.
+
+### Persistencia de la clasificación (HU07-T05)
+
+`saveClassification(report, { filePath, cwd })` guarda el informe de autoría en
+`metrics.json` con un esquema versionado (`schemaVersion: 1`), y
+`loadClassification({ filePath, cwd })` lo recupera para reutilizarlo en análisis
+posteriores. La lectura devuelve `null` si el fichero aún no existe y falla con un
+error descriptivo si el JSON o el esquema no son válidos.
+
+El registro incluye la entrega, los contadores y porcentajes de autoría, el
+dictamen, el umbral de IA, las identidades, las contribuciones y, cuando existe,
+el bloque `unknownReview` de HU07-T04.
