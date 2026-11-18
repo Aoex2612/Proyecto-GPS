@@ -13,6 +13,9 @@ coverage/
 .scannerwork/
 quality-report.json
 
+# Informe del motor de integración continua (HU01-T5)
+ci-report.json
+
 # Entornos y secretos
 .env
 .env.local
