@@ -5,7 +5,7 @@
  * Responsable asignado en Sprint 1: Pablo García Gómez (PG)
  * Revisor asignado (matriz P4): Alejandro Jesús Ortiz Zamora (AZ)
  *
- * Ciclo TDD - Fase Roja (Pruebas de aceptación y verificación formal)
+ * Ciclo TDD - Cobertura exhaustiva de branches y líneas
  */
 
 const {
@@ -17,6 +17,7 @@ const {
   VerificationStatus,
 } = require('../../src/pipeline/process-verifier');
 
+const pipelineFacade = require('../../src/pipeline/index');
 const { DeliveryPhase } = require('../../src/pipeline/phases');
 
 describe('HU01-T07 - Verificar que el proceso cumple con lo demandado por el programador', () => {
@@ -75,6 +76,14 @@ describe('HU01-T07 - Verificar que el proceso cumple con lo demandado por el pro
   };
 
   // --------------------------------------------------------------------------
+  // FACHADA
+  // --------------------------------------------------------------------------
+  test('la fachada src/pipeline/index.js expone las utilidades del verificador', () => {
+    expect(typeof pipelineFacade.verifyProgrammerDemands).toBe('function');
+    expect(pipelineFacade.VerificationStatus).toBeDefined();
+  });
+
+  // --------------------------------------------------------------------------
   // 1. CRITERIO 1: INICIO AUTOMÁTICO ANTE NUEVA ENTREGA
   // --------------------------------------------------------------------------
   describe('Criterio 1: Inicio automático ante entregas o actualizaciones', () => {
@@ -101,6 +110,16 @@ describe('HU01-T07 - Verificar que el proceso cumple con lo demandado por el pro
       expect(evaluation.automated).toBe(true);
     });
 
+    test('cumple ante evento push en rama admitida', () => {
+      const evaluation = evaluateCriterion1_AutomaticTrigger({
+        event: 'push',
+        branch: 'main',
+      });
+
+      expect(evaluation.satisfied).toBe(true);
+      expect(evaluation.automated).toBe(true);
+    });
+
     test('falla cuando el evento requiere disparo manual o no está soportado', () => {
       const evaluation = evaluateCriterion1_AutomaticTrigger({
         event: 'workflow_dispatch',
@@ -111,6 +130,22 @@ describe('HU01-T07 - Verificar que el proceso cumple con lo demandado por el pro
       expect(evaluation.reasons).toContain(
         'El evento no se inició de forma desatendida mediante pull_request o push.',
       );
+    });
+
+    test('falla si la acción no está entre los types válidos o la rama no está admitida', () => {
+      const evalAction = evaluateCriterion1_AutomaticTrigger({
+        event: 'pull_request',
+        action: 'closed',
+        branch: 'develop',
+      });
+      expect(evalAction.satisfied).toBe(false);
+
+      const evalBranch = evaluateCriterion1_AutomaticTrigger({
+        event: 'pull_request',
+        action: 'opened',
+        branch: 'feature-unsupported',
+      });
+      expect(evalBranch.satisfied).toBe(false);
     });
   });
 
@@ -159,7 +194,7 @@ describe('HU01-T07 - Verificar que el proceso cumple con lo demandado por el pro
       expect(evaluation.acceptable).toBe(true);
     });
 
-    test('falla si la duración excede el presupuesto máximo tolerable', () => {
+    test('falla si la duración excede el presupuesto máximo tolerable o es negativa/inválida', () => {
       const evaluation = evaluateCriterion3_ExecutionTiming({
         durationMs: 650000,
         budgetMs: 600000,
@@ -167,6 +202,9 @@ describe('HU01-T07 - Verificar que el proceso cumple con lo demandado por el pro
 
       expect(evaluation.satisfied).toBe(false);
       expect(evaluation.reasons[0]).toContain('Tiempo de ejecución excedido');
+
+      const evalNegative = evaluateCriterion3_ExecutionTiming({ durationMs: -10 });
+      expect(evalNegative.satisfied).toBe(false);
     });
   });
 
@@ -225,6 +263,28 @@ describe('HU01-T07 - Verificar que el proceso cumple con lo demandado por el pro
       expect(audit.summary).toContain('criterios de aceptación de HU01 están verificados');
     });
 
+    test('calcula timing a partir de startedAt y completedAt cuando durationMs no viene dado', () => {
+      const reportWithoutDuration = {
+        ...successfulCiReport,
+        timing: {
+          startedAt: '2026-11-18T10:00:00.000Z',
+          completedAt: '2026-11-18T10:00:30.000Z',
+        },
+      };
+      const audit = verifyProgrammerDemands(reportWithoutDuration);
+      expect(audit.criteria.criterion3_executionTiming.durationSeconds).toBe(30);
+    });
+
+    test('deduce el statusCheck en Criterio 4 cuando notification.published es true y ciReport.status es review_required', () => {
+      const reportReview = {
+        ...successfulCiReport,
+        status: 'review_required',
+        notification: { published: true },
+      };
+      const audit = verifyProgrammerDemands(reportReview);
+      expect(audit.criteria.criterion4_clearNotification.statusCheck).toBe('failure');
+    });
+
     test('genera informe Markdown formateado para auditoría de entrega', () => {
       const audit = verifyProgrammerDemands(successfulCiReport);
 
@@ -251,6 +311,19 @@ describe('HU01-T07 - Verificar que el proceso cumple con lo demandado por el pro
       expect(audit.compliancePercentage).toBe(50.0);
       expect(audit.unmetCriteria.length).toBe(2);
       expect(audit.allCriteriaSatisfied).toBe(false);
+    });
+
+    test('dictamina NON_COMPLIANT si ningún criterio es satisfecho', () => {
+      const totallyFailedReport = {
+        trigger: { automated: false, event: 'manual' },
+        authorship: null,
+        timing: { durationMs: -1 },
+        notification: { published: false, statusCheck: null },
+      };
+
+      const audit = verifyProgrammerDemands(totallyFailedReport);
+      expect(audit.status).toBe(VerificationStatus.NON_COMPLIANT);
+      expect(audit.passedCriteriaCount).toBe(0);
     });
   });
 });

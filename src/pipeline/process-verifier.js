@@ -186,23 +186,23 @@ function evaluateCriterion4_ClearNotification(input = {}) {
 function verifyProgrammerDemands(ciReport = {}) {
   const trigger = ciReport.trigger || {};
   const timing = ciReport.timing || {};
-  const authorship = ciReport.authorship || {};
   const notification = ciReport.notification || {};
   const tasks = Array.isArray(ciReport.tasks) ? ciReport.tasks : [];
   const taskIds = tasks.map((t) => t.id);
 
   // 1. Evaluar Criterio 1
+  const hasTrigger = Boolean(trigger.event || ciReport.delivery?.pullRequest || ciReport.delivery?.baseBranch);
   const crit1 = evaluateCriterion1_AutomaticTrigger({
-    event: trigger.event || (ciReport.delivery?.pullRequest ? 'pull_request' : 'push'),
+    event: trigger.event || (ciReport.delivery?.pullRequest ? 'pull_request' : hasTrigger ? 'push' : 'unknown'),
     action: trigger.action || 'opened',
-    branch: ciReport.delivery?.baseBranch || 'develop',
-    automated: trigger.automated !== false,
+    branch: ciReport.delivery?.baseBranch || (hasTrigger ? 'develop' : 'unsupported'),
+    automated: trigger.automated !== undefined ? trigger.automated : hasTrigger,
   });
 
   // 2. Evaluar Criterio 2
   const crit2 = evaluateCriterion2_UnattendedAuthorship({
-    authorship,
-    manualInterventionRequired: false,
+    authorship: ciReport.authorship,
+    manualInterventionRequired: Boolean(ciReport.manualInterventionRequired),
     tasksExecuted: taskIds,
   });
 
