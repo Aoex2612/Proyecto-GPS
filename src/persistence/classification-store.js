@@ -52,15 +52,33 @@ function toNonNegativeNumber(value) {
 
 /**
  * Normaliza el umbral de IA a un porcentaje entre 0 y 100.
+ *
+ * Los valores ausentes o vacíos (`undefined`, `null` y `''`) se resuelven con
+ * el umbral por defecto (50), igual que hace el detector de autoría. Cualquier
+ * valor numérico fuera del rango `[0, 100]` se rechaza en lugar de recortarse,
+ * para no ocultar una configuración inválida.
+ *
  * @param {*} value
  * @returns {number}
+ * @throws {RangeError} Si el umbral es un número fuera del rango `[0, 100]`.
  */
 function normalizeThreshold(value) {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return DEFAULT_AI_THRESHOLD;
+  }
+
   const number = Number(value);
   if (!Number.isFinite(number)) {
     return DEFAULT_AI_THRESHOLD;
   }
-  return Math.min(Math.max(number, 0), 100);
+
+  if (number < 0 || number > 100) {
+    throw new RangeError(
+      `El umbral de IA (\`thresholdAi\`) debe estar entre 0 y 100; se recibió ${number}.`,
+    );
+  }
+
+  return number;
 }
 
 /**
@@ -174,19 +192,41 @@ function validateClassificationRecord(record) {
   if (!isPlainObject(record.authorship)) {
     errors.push('Falta el bloque `authorship` o no es un objeto.');
   } else {
-    for (const key of ['human', 'aiAssisted', 'unknown']) {
+    for (const key of ['human', 'aiAssisted', 'unknown', 'total']) {
       if (!Number.isFinite(record.authorship[key])) {
         errors.push(`El contador \`authorship.${key}\` debe ser numérico.`);
+      }
+    }
+
+    if (!isPlainObject(record.authorship.percentage)) {
+      errors.push('Falta el desglose `authorship.percentage` o no es un objeto.');
+    } else {
+      for (const key of ['human', 'aiAssisted', 'unknown']) {
+        if (!Number.isFinite(record.authorship.percentage[key])) {
+          errors.push(`El porcentaje \`authorship.percentage.${key}\` debe ser numérico.`);
+        }
+      }
+    }
+
+    if (!isPlainObject(record.authorship.lines)) {
+      errors.push('Falta el desglose `authorship.lines` o no es un objeto.');
+    } else {
+      for (const key of ['human', 'aiAssisted', 'unknown', 'total']) {
+        if (!Number.isFinite(record.authorship.lines[key])) {
+          errors.push(`El recuento \`authorship.lines.${key}\` debe ser numérico.`);
+        }
       }
     }
   }
 
   if (!isPlainObject(record.verdict) || typeof record.verdict.status !== 'string') {
     errors.push('Falta el bloque `verdict` o no incluye un `status` textual.');
+  } else if (!Array.isArray(record.verdict.reasons)) {
+    errors.push('El campo `verdict.reasons` debe ser un array.');
   }
 
-  if (!Number.isFinite(record.thresholdAi)) {
-    errors.push('El umbral `thresholdAi` debe ser numérico.');
+  if (!Number.isFinite(record.thresholdAi) || record.thresholdAi < 0 || record.thresholdAi > 100) {
+    errors.push('El umbral `thresholdAi` debe ser numérico y estar entre 0 y 100.');
   }
 
   if (!Array.isArray(record.identities)) {
@@ -202,6 +242,52 @@ function validateClassificationRecord(record) {
   }
 
   return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Comprueba que el informe contiene datos reales antes de persistirlo.
+ *
+ * Evita que un objeto vacío (o un informe sin `authorship`/`verdict`) genere un
+ * registro aparentemente válido con todos los contadores a `0` y
+ * `status: 'unknown'`, que contaminaría análisis posteriores.
+ *
+ * @param {object} report
+ * @throws {TypeError|Error} Si el informe no tiene datos que guardar.
+ */
+function assertPersistableReport(report) {
+  if (!isPlainObject(report)) {
+    throw new TypeError(
+      'El informe de autoría debe ser un objeto con datos de `authorship` y `verdict`.',
+    );
+  }
+
+  if (Object.keys(report).length === 0) {
+    throw new Error(
+      'No se puede guardar un informe de autoría vacío: no contiene datos de `authorship` ni `verdict`.',
+    );
+  }
+
+  const hasAuthorshipData =
+    isPlainObject(report.authorship) &&
+    ['human', 'aiAssisted', 'unknown', 'total', 'percentage', 'lines'].some(
+      (field) => report.authorship[field] !== undefined,
+    );
+
+  if (!hasAuthorshipData) {
+    throw new Error(
+      'No se puede guardar el informe de autoría: falta el bloque `authorship` con datos reales.',
+    );
+  }
+
+  const hasVerdictData =
+    isPlainObject(report.verdict) &&
+    ['status', 'exceedsThreshold', 'reasons'].some((field) => report.verdict[field] !== undefined);
+
+  if (!hasVerdictData) {
+    throw new Error(
+      'No se puede guardar el informe de autoría: falta el bloque `verdict` con datos reales.',
+    );
+  }
 }
 
 /**
@@ -224,6 +310,8 @@ async function saveClassification(
     generatedAt,
   } = {},
 ) {
+  assertPersistableReport(report);
+
   const record = buildClassificationRecord(report, { generatedAt });
   const reportPath = path.resolve(cwd, filePath);
 

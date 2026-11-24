@@ -83,6 +83,26 @@ está en `sonar-project.properties` y el diseño completo en
 > Si no existe `SONAR_TOKEN`, el análisis queda en estado `skipped` y no bloquea
 > el pipeline.
 
+### 7. Motor de integración continua (HU01-T5)
+
+El job `lifecycle` ejecuta el motor de CI después de `validate` y `quality`.
+Valida que el evento de GitHub dispara el análisis, recorre las fases
+automáticas del contrato (`pull_request`, `analysis` y `reporting`), descarga
+los commits de la entrega y ejecuta el detector de autoría de HU01-T3. Después
+genera `ci-report.json`, que se publica como artefacto `ci-lifecycle-report` y
+se resume en el job summary:
+
+```bash
+# Reproducción local (sin GitHub Actions)
+$env:GITHUB_REPOSITORY = 'equipo-uma/proyecto-gps'
+$env:GITHUB_EVENT_NAME = 'pull_request'
+node src/pipeline/cli.js
+Get-Content ci-report.json
+```
+
+El diseño completo, el catálogo de tareas y los timeouts están documentados en
+[`docs/HU01-T05-motor-ci.md`](docs/HU01-T05-motor-ci.md).
+
 ---
 
 ## 🌳 Flujo de Trabajo en Git (GitFlow Simplificado)
@@ -123,14 +143,14 @@ Una tarea solo se considera **terminada** si cumple:
 
 ```text
 ├── .github/
-│   ├── workflows/ci.yml           # Pipeline de validación automática
+│   ├── workflows/ci.yml           # Pipeline: validate, quality y lifecycle
 │   └── pull_request_template.md   # Plantilla de PR con checklist del DoD
 ├── src/
 │   ├── index.js                   # Entrypoint de la GitHub Action
 │   ├── auth/                      # HU08: Cliente de GitHub y llamadas seguras (Octokit)
 │   ├── classifier/                # HU07: Clasificador de autoría (Humano / IA / Desconocido)
 │   ├── git/                       # HU01 / HU07: Extracción de metadatos de Git y commits
-│   ├── pipeline/                  # HU01: Contrato de fases del ciclo de entrega
+│   ├── pipeline/                  # HU01: Fases, procesos y motor de integración continua
 │   ├── persistence/               # HU07-T5: Guardado y lectura de la clasificación (metrics.json)
 │   ├── quality/                   # HU01-T4: Cliente SonarCloud, umbrales y reporte
 │   ├── reporter/                  # HU08: Notificación en PRs y manejo de errores
@@ -143,6 +163,10 @@ Una tarea solo se considera **terminada** si cumple:
 ├── .eslintrc.json                 # Reglas de linter
 └── .prettierrc                    # Configuración de formateo
 ```
+
+### Reintentos de operaciones (HU08-T4)
+
+`withRetry(operation, options)` en `src/utils/retry.js` ofrece una política común para operaciones asíncronas: hasta 3 intentos por defecto, con espera exponencial (1 s, 2 s) y respeto de las cabeceras `Retry-After` y `X-RateLimit-Reset` de GitHub. Solo reintenta fallos transitorios de red, HTTP 408/429/5xx y respuestas 403 identificadas como límite de peticiones; los demás errores se propagan sin reintento. Los parámetros `maxAttempts`, `baseDelayMs`, `maxDelayMs`, `sleep`, `shouldRetry` y `logger` se pueden configurar. Debe usarse especialmente con operaciones idempotentes, ya que el resultado de una petición de escritura que perdió la respuesta puede ser ambiguo.
 
 ### Metadatos e identidades (HU07-T02)
 

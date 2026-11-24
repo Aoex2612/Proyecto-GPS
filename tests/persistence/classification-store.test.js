@@ -125,6 +125,39 @@ describe('HU07-T05 - Guardado de la clasificación para análisis posteriores', 
         buildClassificationRecord(createReport(), { generatedAt: 'no-es-una-fecha' }),
       ).toThrow(TypeError);
     });
+
+    test.each([null, ''])(
+      'normaliza el umbral %p al valor por defecto (50, nunca 0)',
+      (thresholdAi) => {
+        const record = buildClassificationRecord(createReport({ thresholdAi }), {
+          generatedAt: GENERATED_AT,
+        });
+
+        expect(record.thresholdAi).toBe(50);
+      },
+    );
+
+    test('normaliza el umbral ausente al valor por defecto (50)', () => {
+      const record = buildClassificationRecord(createReport({ thresholdAi: undefined }), {
+        generatedAt: GENERATED_AT,
+      });
+
+      expect(record.thresholdAi).toBe(50);
+    });
+
+    test.each([0, 100])('acepta el umbral %p dentro del rango [0, 100]', (thresholdAi) => {
+      const record = buildClassificationRecord(createReport({ thresholdAi }), {
+        generatedAt: GENERATED_AT,
+      });
+
+      expect(record.thresholdAi).toBe(thresholdAi);
+    });
+
+    test.each([500, -1])('rechaza el umbral %p fuera del rango [0, 100]', (thresholdAi) => {
+      expect(() =>
+        buildClassificationRecord(createReport({ thresholdAi }), { generatedAt: GENERATED_AT }),
+      ).toThrow(/umbral/i);
+    });
   });
 
   describe('Serialización del registro', () => {
@@ -156,6 +189,38 @@ describe('HU07-T05 - Guardado de la clasificación para análisis posteriores', 
       expect(result.errors.length).toBeGreaterThanOrEqual(3);
       expect(result.errors.join(' ')).toContain('Versión de esquema');
     });
+
+    test.each([
+      'authorship.human',
+      'authorship.aiAssisted',
+      'authorship.unknown',
+      'authorship.total',
+      'authorship.percentage',
+      'authorship.lines',
+      'verdict.reasons',
+    ])('marca el registro como inválido si falta %s', (field) => {
+      const record = buildClassificationRecord(createReport(), { generatedAt: GENERATED_AT });
+      const keys = field.split('.');
+      delete record[keys[0]][keys[1]];
+
+      const result = validateClassificationRecord(record);
+
+      expect(result.valid).toBe(false);
+      expect(result.errors.join(' ')).toContain(field);
+    });
+
+    test.each([500, -1])(
+      'marca el registro como inválido si thresholdAi vale %p',
+      (thresholdAi) => {
+        const record = buildClassificationRecord(createReport(), { generatedAt: GENERATED_AT });
+        record.thresholdAi = thresholdAi;
+
+        const result = validateClassificationRecord(record);
+
+        expect(result.valid).toBe(false);
+        expect(result.errors.join(' ')).toContain('thresholdAi');
+      },
+    );
   });
 
   describe('Guardado en metrics.json', () => {
@@ -201,6 +266,18 @@ describe('HU07-T05 - Guardado de la clasificación para análisis posteriores', 
       await expect(
         saveClassification(createReport(), { writeFileImpl, generatedAt: GENERATED_AT }),
       ).rejects.toThrow('disco lleno');
+    });
+
+    test.each([
+      ['un objeto vacío', {}],
+      ['un informe sin authorship', { verdict: { status: 'human', reasons: [] } }],
+      ['un informe sin verdict', { authorship: { human: 1, aiAssisted: 0, unknown: 0, total: 1 } }],
+      ['un informe con bloques vacíos', { authorship: {}, verdict: {} }],
+    ])('rechaza guardar %s y no escribe ningún registro', async (_label, report) => {
+      const writeFileImpl = jest.fn();
+
+      await expect(saveClassification(report, { writeFileImpl })).rejects.toThrow(Error);
+      expect(writeFileImpl).not.toHaveBeenCalled();
     });
   });
 
